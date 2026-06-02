@@ -61,6 +61,17 @@ import {
   modelProfiles as codexOpenRouterModelProfiles,
 } from "@computermotivators/adapter-codex-openrouter-local";
 import {
+  execute as directOpenRouterExecute,
+  sessionCodec as directOpenRouterSessionCodec,
+  testEnvironment as directOpenRouterTestEnvironment,
+  getConfigSchema as getDirectOpenRouterConfigSchema,
+} from "@computermotivators/adapter-direct-openrouter-local/server";
+import {
+  agentConfigurationDoc as directOpenRouterAgentConfigurationDoc,
+  models as directOpenRouterModels,
+  modelProfiles as directOpenRouterModelProfiles,
+} from "@computermotivators/adapter-direct-openrouter-local";
+import {
   execute as cursorExecute,
   listCursorSkills,
   syncCursorSkills,
@@ -345,6 +356,27 @@ const codexOpenRouterLocalAdapter: ServerAdapterModule = {
   agentConfigurationDoc: codexOpenRouterAgentConfigurationDoc,
 };
 
+const directOpenRouterLocalAdapter: ServerAdapterModule = {
+  type: "direct_openrouter_local",
+  execute: directOpenRouterExecute,
+  testEnvironment: directOpenRouterTestEnvironment,
+  sessionCodec: directOpenRouterSessionCodec,
+  sessionManagement: getAdapterSessionManagement("direct_openrouter_local") ?? undefined,
+  models: directOpenRouterModels,
+  modelProfiles: directOpenRouterModelProfiles,
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: true,
+  instructionsPathKey: "instructionsFilePath",
+  requiresMaterializedRuntimeSkills: false,
+  getRuntimeCommandSpec: (config) => ({
+    command: readConfiguredCommand(config, "python3"),
+    detectCommand: readConfiguredCommand(config, "python3"),
+    installCommand: null,
+  }),
+  agentConfigurationDoc: directOpenRouterAgentConfigurationDoc,
+  getConfigSchema: getDirectOpenRouterConfigSchema,
+};
+
 const cursorLocalAdapter: ServerAdapterModule = {
   type: "cursor",
   execute: cursorExecute,
@@ -552,6 +584,7 @@ function registerBuiltInAdapters() {
     claudeLocalAdapter,
     codexLocalAdapter,
     codexOpenRouterLocalAdapter,
+    directOpenRouterLocalAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
     cursorCloudAdapter,

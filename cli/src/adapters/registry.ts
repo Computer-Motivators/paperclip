@@ -3,6 +3,7 @@ import { printAcpxStreamEvent } from "@paperclipai/adapter-acpx-local/cli";
 import { printClaudeStreamEvent } from "@paperclipai/adapter-claude-local/cli";
 import { printCodexStreamEvent } from "@paperclipai/adapter-codex-local/cli";
 import { printCodexStreamEvent as printCodexOpenRouterStreamEvent } from "@computermotivators/adapter-codex-openrouter-local/cli";
+import { printDirectOpenRouterStreamEvent } from "@computermotivators/adapter-direct-openrouter-local/cli";
 import { printCursorStreamEvent } from "@paperclipai/adapter-cursor-local/cli";
 import { printCursorCloudEvent } from "@paperclipai/adapter-cursor-cloud/cli";
 import { printGeminiStreamEvent } from "@paperclipai/adapter-gemini-local/cli";
@@ -31,6 +32,11 @@ const codexLocalCLIAdapter: CLIAdapterModule = {
 const codexOpenRouterLocalCLIAdapter: CLIAdapterModule = {
   type: "codex_openrouter_local",
   formatStdoutEvent: printCodexOpenRouterStreamEvent,
+};
+
+const directOpenRouterLocalCLIAdapter: CLIAdapterModule = {
+  type: "direct_openrouter_local",
+  formatStdoutEvent: printDirectOpenRouterStreamEvent,
 };
 
 const openCodeLocalCLIAdapter: CLIAdapterModule = {
@@ -74,6 +80,7 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     claudeLocalCLIAdapter,
     codexLocalCLIAdapter,
     codexOpenRouterLocalCLIAdapter,
+    directOpenRouterLocalCLIAdapter,
     openCodeLocalCLIAdapter,
     piLocalCLIAdapter,
     cursorLocalCLIAdapter,
