@@ -51,6 +51,7 @@ import {
   resolveOpenRouterApiKey,
 } from "./codex-openrouter-home.js";
 import { prepareCodexOpenRouterPromptBundle } from "./prompt-cache.js";
+import { resolveOpenRouterRunCostUsd } from "./openrouter-pricing.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildCodexExecArgs } from "./codex-args.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
@@ -740,6 +741,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     attempt: { proc: { exitCode: number | null; signal: string | null; timedOut: boolean; stdout: string; stderr: string }; rawStderr: string; parsed: ReturnType<typeof parseCodexJsonl> },
     clearSessionOnMissingSession = false,
     isRetry = false,
+    costUsd: number | null = null,
   ): AdapterExecutionResult => {
     if (attempt.proc.timedOut) {
       return {
@@ -814,7 +816,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       biller: "openrouter",
       model,
       billingType,
-      costUsd: null,
+      costUsd,
       resultJson: {
         stdout: attempt.proc.stdout,
         stderr: attempt.proc.stderr,
@@ -826,6 +828,14 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       clearSession: Boolean((clearSessionOnMissingSession || forceFreshSession) && !resolvedSessionId),
     };
   };
+
+  const resolveAttemptCostUsd = async (parsed: ReturnType<typeof parseCodexJsonl>) =>
+    resolveOpenRouterRunCostUsd({
+      modelId: model,
+      usage: parsed.usage,
+      parsedCostUsd: parsed.costUsd,
+      apiKey: configuredOpenRouterApiKey,
+    });
 
   try {
     const initial = await runAttempt(sessionId);
@@ -840,10 +850,10 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
         `[paperclip] Codex resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
       );
       const retry = await runAttempt(null);
-      return toResult(retry, true, true);
+      return toResult(retry, true, true, await resolveAttemptCostUsd(retry.parsed));
     }
 
-    return toResult(initial, false, false);
+    return toResult(initial, false, false, await resolveAttemptCostUsd(initial.parsed));
   } finally {
     if (paperclipBridge) {
       await paperclipBridge.stop();

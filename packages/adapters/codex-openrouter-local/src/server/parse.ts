@@ -20,6 +20,7 @@ export function parseCodexJsonl(stdout: string) {
     cachedInputTokens: 0,
     outputTokens: 0,
   };
+  let costUsd: number | null = null;
 
   for (const rawLine of stdout.split(/\r?\n/)) {
     const line = rawLine.trim();
@@ -54,6 +55,10 @@ export function parseCodexJsonl(stdout: string) {
       usage.inputTokens = asNumber(usageObj.input_tokens, usage.inputTokens);
       usage.cachedInputTokens = asNumber(usageObj.cached_input_tokens, usage.cachedInputTokens);
       usage.outputTokens = asNumber(usageObj.output_tokens, usage.outputTokens);
+      const turnCostUsd = asNumber(event.total_cost_usd, 0);
+      if (turnCostUsd > 0) {
+        costUsd = (costUsd ?? 0) + turnCostUsd;
+      }
       continue;
     }
 
@@ -68,6 +73,7 @@ export function parseCodexJsonl(stdout: string) {
     sessionId,
     summary: finalMessage?.trim() ?? "",
     usage,
+    costUsd,
     errorMessage,
   };
 }

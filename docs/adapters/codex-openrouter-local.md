@@ -51,6 +51,10 @@ Paperclip optimizes token use in three layers:
 
 Run usage reports `cachedInputTokens` when the provider returns cache read metrics.
 
+## Cost Reporting
+
+Codex JSONL does not currently include `total_cost_usd` for OpenRouter-routed runs. After each run, the adapter estimates dollar cost from OpenRouter model pricing (`GET /api/v1/models`) using reported input, cache-read, and output tokens. If Codex begins emitting `total_cost_usd`, that value takes precedence over the estimate.
+
 ## Model Discovery
 
 When `OPENROUTER_API_KEY` is available on the server, the board refreshes models from `GET https://openrouter.ai/api/v1/models`, preferring `openai/*` slugs and merging with the adapter fallback list.
