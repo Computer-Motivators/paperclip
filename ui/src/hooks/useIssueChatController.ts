@@ -1,6 +1,6 @@
 import { useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
-import type { ActivityEvent, IssueComment } from "@paperclipai/shared";
+import type { ActivityEvent, Issue, IssueComment } from "@paperclipai/shared";
 import { activityApi, type RunForIssue } from "../api/activity";
 import { heartbeatsApi, type ActiveRunForIssue, type LiveRunForIssue } from "../api/heartbeats";
 import { resolveIssueActiveRun } from "../lib/issueActiveRun";
@@ -27,28 +27,14 @@ function resolveRunningIssueRun(
   activeRun: ActiveRunForIssue | null,
   liveRuns: readonly LiveRunForIssue[],
 ) {
-  if (activeRun) {
-    const resolved = liveRuns.find((run) => run.id === activeRun.id);
-    return resolved ?? {
-      ...activeRun,
-      runId: activeRun.id,
-      contextIssueId: activeRun.contextIssueId ?? null,
-      contextCommentId: activeRun.contextCommentId ?? null,
-      contextWakeCommentId: activeRun.contextWakeCommentId ?? null,
-      contextInteractionId: activeRun.contextInteractionId ?? null,
-      issueUpdatedAt: activeRun.updatedAt,
-      issueSequenceNo: null,
-      triggerSource: activeRun.source,
-      triggerDetail: activeRun.triggerDetail,
-      queuedAt: activeRun.startedAt ?? activeRun.createdAt,
-    };
-  }
-  return liveRuns[0] ?? null;
+  return activeRun?.status === "running"
+    ? activeRun
+    : liveRuns.find((run) => run.status === "running") ?? null;
 }
 
 export function useIssueChatController(input: {
   issueId: string;
-  issueStatus: string;
+  issueStatus: Issue["status"];
   executionRunId: string | null;
   comments: IssueChatControllerComment[];
   locallyQueuedCommentRunIds: ReadonlyMap<string, string>;

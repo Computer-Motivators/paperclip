@@ -19,9 +19,11 @@ export {
 } from "./budget.js";
 
 export {
+  boardChatAgentSchema,
   createCompanySchema,
   updateCompanySchema,
   updateCompanyBrandingSchema,
+  type BoardChatAgentInput,
   type CreateCompany,
   type UpdateCompany,
   type UpdateCompanyBranding,

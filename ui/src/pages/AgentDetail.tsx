@@ -4008,7 +4008,8 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           const chunk = typeof payload.chunk === "string" ? payload.chunk : "";
           if (!chunk) return;
           const streamRaw = asNonEmptyString(payload.stream);
-          const stream = streamRaw === "stderr" || streamRaw === "system" ? streamRaw : "stdout";
+          const stream: "stdout" | "stderr" | "system" =
+            streamRaw === "stderr" || streamRaw === "system" ? streamRaw : "stdout";
           const ts = asNonEmptyString((payload as Record<string, unknown>).ts) ?? event.createdAt;
           setLogLines((prev) => {
             const bounded = appendWithMaxItems(prev, [{ ts, stream, chunk }], MAX_LOG_LINES_RETAINED);

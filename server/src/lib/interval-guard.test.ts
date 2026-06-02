@@ -5,7 +5,7 @@ describe("createIntervalGuard", () => {
   it("skips overlapping runs", async () => {
     const guard = createIntervalGuard("test");
     let runs = 0;
-    let release: (() => void) | null = null;
+    let release: (() => void) | undefined;
 
     const first = guard.run(
       () =>

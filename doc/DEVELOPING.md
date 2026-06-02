@@ -23,6 +23,33 @@ GitHub Actions owns `pnpm-lock.yaml`.
 - Pull request CI validates dependency resolution when manifests change.
 - Pushes to `master` regenerate `pnpm-lock.yaml` with `pnpm install --lockfile-only --no-frozen-lockfile`, commit it back if needed, and then run verification with `--frozen-lockfile`.
 
+## Dependency Safeguards (Deferred npm Releases)
+
+This fork defers freshly published npm versions to reduce supply-chain risk from
+zero-day compromised releases.
+
+**Enforced locally and in CI today (pnpm 9.15.4):**
+
+- `.npmrc` sets `engine-strict=true` so installs respect each package's Node engine range.
+- `pnpm check:dependency-release-age` scans **lockfile diffs** and fails when a newly
+  pinned version was published inside the last 24 hours (override with
+  `PAPERCLIP_MIN_RELEASE_AGE_MINUTES`, use `0` only for emergencies).
+- Dependabot runs **monthly** with cooldown windows (7–30 days by semver level) and
+  ignores automated major bumps.
+- PR quality gates post an informational warning when a lockfile diff pins versions
+  younger than the release-age policy.
+
+**Planned upgrade (pnpm ≥ 10.16):** add to `pnpm-workspace.yaml`:
+
+```yaml
+minimumReleaseAge: 1440
+minimumReleaseAgeStrict: false
+```
+
+That lets `pnpm install` itself reject immature versions during resolution, not just
+during post-hoc lockfile review. Until the `packageManager` field is bumped, use the
+`check:dependency-release-age` script before merging dependency changes.
+
 ## Start Dev
 
 From repo root:

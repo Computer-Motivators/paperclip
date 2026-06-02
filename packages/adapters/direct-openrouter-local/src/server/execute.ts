@@ -6,8 +6,8 @@ import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclip
 import {
   asNumber,
   asString,
-  buildInvocationEnvForLogs,
   buildPaperclipEnv,
+  joinPromptSections,
   parseObject,
   renderPaperclipWakePrompt,
   renderTemplate,
@@ -75,8 +75,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const issueId = asString(context.issueId, "").trim();
   const sessionSeed = runtime.sessionId ?? (issueId ? `issue:${issueId}` : `run:${runId}`);
   const sessionId = `pc:${agent.companyId}:${agent.id}:${sessionSeed}`.slice(0, 128);
-  const wakePayload = renderPaperclipWakePrompt(context);
-  const runPrompt = renderTemplate(promptTemplate, wakePayload);
+  const wakePrompt = renderPaperclipWakePrompt(context.paperclipWake);
+  const runPrompt = joinPromptSections([
+    renderTemplate(promptTemplate, context),
+    wakePrompt,
+  ]);
 
   let instructionsContents = "";
   if (instructionsFilePath) {
@@ -154,8 +157,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     stdin: JSON.stringify(payload),
     onLog,
     onSpawn: ctx.onSpawn,
-    commandForLogs: `${command} ${scriptPath}`,
-    envForLogs: buildInvocationEnvForLogs(effectiveEnv),
   });
 
   await fs.rm(path.dirname(scriptPath), { recursive: true, force: true });

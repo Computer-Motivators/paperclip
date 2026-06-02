@@ -20,11 +20,17 @@ export function parseDirectOpenRouterStdoutLine(line: string, ts: string): Trans
     return text ? [{ kind: "assistant", ts, text }] : [];
   }
   if (type === "tool_result") {
-    return [{ kind: "tool", ts, text: JSON.stringify(event, null, 2) }];
+    return [{
+      kind: "tool_result",
+      ts,
+      toolUseId: "direct-openrouter",
+      content: JSON.stringify(event, null, 2),
+      isError: false,
+    }];
   }
   if (type === "error") {
     const text = typeof event.message === "string" ? event.message : "Direct OpenRouter error";
-    return [{ kind: "error", ts, text }];
+    return [{ kind: "stderr", ts, text }];
   }
   if (type === "usage") {
     const input = Number(event.input_tokens ?? 0);

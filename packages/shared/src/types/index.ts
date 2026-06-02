@@ -1,4 +1,4 @@
-export type { Company } from "./company.js";
+export type { BoardChatState, Company } from "./company.js";
 export type {
   Environment,
   EnvironmentLease,

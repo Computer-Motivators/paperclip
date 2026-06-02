@@ -1,7 +1,7 @@
 import { and, desc, eq, isNotNull, ne } from "drizzle-orm";
 import type { Db } from "@paperclipai/db";
-import { issues } from "@paperclipai/db/schema";
-import type { BoardChatState, Issue } from "@paperclipai/shared";
+import { issues } from "@paperclipai/db";
+import type { Agent, BoardChatState, Issue } from "@paperclipai/shared";
 import { notFound, unprocessable } from "../errors.js";
 import { agentService } from "./agents.js";
 import { issueService } from "./issues.js";
@@ -47,7 +47,10 @@ export function boardChatService(db: Db) {
 
   async function buildState(companyId: string, issue: Issue | null): Promise<BoardChatState> {
     if (!issue) return { issue: null, agent: null };
-    return { issue, agent: await resolveAgent(companyId, issue.assigneeAgentId ?? null) };
+    return {
+      issue,
+      agent: (await resolveAgent(companyId, issue.assigneeAgentId ?? null)) as Agent | null,
+    };
   }
 
   async function get(companyId: string, userId: string): Promise<BoardChatState> {
@@ -55,7 +58,7 @@ export function boardChatService(db: Db) {
     if (!issueId) return { issue: null, agent: null };
     const issue = await issuesSvc.getById(issueId);
     if (!issue || issue.companyId !== companyId) return { issue: null, agent: null };
-    return buildState(companyId, issue);
+    return buildState(companyId, issue as Issue);
   }
 
   async function updateAssignee(companyId: string, issueId: string, agentId: string): Promise<BoardChatState> {
@@ -66,7 +69,7 @@ export function boardChatService(db: Db) {
       status: "in_progress",
     });
     if (!updated || updated.companyId !== companyId) throw notFound("Issue not found");
-    return buildState(companyId, updated);
+    return buildState(companyId, updated as Issue);
   }
 
   async function ensure(companyId: string, userId: string, agentId: string): Promise<BoardChatState> {
@@ -90,7 +93,7 @@ export function boardChatService(db: Db) {
         originFingerprint: `board_chat:${companyId}:${userId}`,
         hiddenAt: new Date(),
       });
-      return buildState(companyId, issue);
+      return buildState(companyId, issue as Issue);
     } catch (error) {
       const maybe = error as { code?: string; constraint?: string; message?: string };
       const conflict = maybe.code === "23505"

@@ -62,3 +62,6 @@ tests/release-smoke/playwright-report/
 .herenow
 
 *.pnpm-debug.log*
+.pnpm-bin
+__pycache__/
+*.pyc

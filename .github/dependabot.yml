@@ -3,21 +3,36 @@ updates:
   - package-ecosystem: npm
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
-    open-pull-requests-limit: 10
+    # Defer freshly published versions — see doc/DEVELOPING.md (Dependency safeguards).
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+      semver-minor-days: 14
+      semver-patch-days: 7
+    open-pull-requests-limit: 5
     labels:
       - "dependencies"
+    groups:
+      npm-production-minor-patch:
+        patterns:
+          - "*"
+        update-types:
+          - "minor"
+          - "patch"
     ignore:
-      # Ignore major version bumps — review those manually
+      # Review major bumps manually — they are higher risk and often need code changes.
       - dependency-name: "*"
         update-types: ["version-update:semver-major"]
 
   - package-ecosystem: github-actions
     directory: "/"
     schedule:
-      interval: weekly
+      interval: monthly
       day: monday
       time: "06:00"
-    open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 3
