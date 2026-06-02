@@ -1,9 +1,9 @@
 ---
 title: Deployment Overview
-summary: Deployment modes at a glance
+summary: Local dev vs Railway production
 ---
 
-Paperclip supports three deployment configurations, from zero-friction local to internet-facing production.
+This fork supports local development and **Railway** as the production deployment target.
 
 ## Deployment Modes
 
@@ -11,7 +11,7 @@ Paperclip supports three deployment configurations, from zero-friction local to 
 |------|------|----------|
 | `local_trusted` | No login required | Single-operator local machine |
 | `authenticated` + `private` | Login required | Private network (Tailscale, VPN, LAN) |
-| `authenticated` + `public` | Login required | Internet-facing cloud deployment |
+| `authenticated` + `public` | Login required | **Railway production** (internet-facing) |
 
 ## Quick Comparison
 
@@ -20,7 +20,7 @@ Paperclip supports three deployment configurations, from zero-friction local to 
 - Loopback-only host binding (localhost)
 - No human login flow
 - Fastest local startup
-- Best for: solo development and experimentation
+- Best for: solo development and experimentation (`pnpm dev`)
 
 ### Authenticated + Private
 
@@ -29,18 +29,18 @@ Paperclip supports three deployment configurations, from zero-friction local to 
 - Auto base URL mode (lower friction)
 - Best for: team access over Tailscale or local network
 
-### Authenticated + Public
+### Authenticated + Public (Railway)
 
 - Login required
-- Explicit public URL required
+- Explicit public URL required (`PAPERCLIP_PUBLIC_URL`)
 - Stricter security checks
-- Best for: cloud hosting, internet-facing deployment
+- Best for: this fork's Railway production stack
 
 ## Choosing a Mode
 
-- **Just trying Paperclip?** Use `local_trusted` (the default)
+- **Working on the codebase?** Use `local_trusted` with `pnpm dev` (the default)
 - **Sharing with a team on private network?** Use `authenticated` + `private`
-- **Deploying to the cloud?** Use `authenticated` + `public` — see [Railway guide](railway.md) or [AWS ECS Fargate guide](aws-ecs.md)
+- **Production deploy?** Use Railway with `authenticated` + `public` — see [Railway guide](railway.md)
 
 Set the mode during onboarding:
 
@@ -53,3 +53,5 @@ Or update it later:
 ```sh
 pnpm paperclipai configure --section server
 ```
+
+For Railway, set mode and exposure via dashboard env vars instead of onboard — see [RAILWAY.md](../../RAILWAY.md).

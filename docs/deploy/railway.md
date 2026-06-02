@@ -1,35 +1,36 @@
 ---
 title: Railway
-summary: Deploy this Paperclip fork on Railway with GitHub auto-build
+summary: Production deployment for the Common-Waste Paperclip fork
 ---
 
-Deploy Paperclip on [Railway](https://railway.com) using the repo Dockerfile, Railway-managed PostgreSQL, and a persistent volume for instance data.
+Deploy this fork on [Railway](https://railway.com) using the repo Dockerfile, Railway-managed PostgreSQL, and a persistent volume for instance data.
 
-This guide covers switching from the public upstream Docker image to auto-building this fork from GitHub, while keeping Postgres, volume data, and your public domain.
+Quick checklist: [RAILWAY.md](../../RAILWAY.md).
 
 ## Architecture
 
 ```text
-GitHub (fork) ──push──▶ Railway Dockerfile build ──▶ Paperclip service
+GitHub (Common-Waste-Technology/paperclip) ──push──▶ Railway Dockerfile build
                                                           │
                                                           ├── Railway Postgres (DATABASE_URL)
                                                           └── Volume mounted at /paperclip
 ```
 
-Railway does not run `docker-compose.yml` directly. Use one app service plus Railway's managed Postgres plugin.
+Railway does not run `docker-compose.yml`. Use one app service plus Railway's managed Postgres plugin.
 
 ## Prerequisites
 
-- Railway account with a project (existing Paperclip stack is fine)
-- This fork pushed to GitHub and connected to Railway
-- Public deployment uses `authenticated` + `public` mode with login required
+- Railway account and project
+- This repo connected to the app service (branch: `master`)
+- Volume attached at `/paperclip` on the app service
 
 ## Repo configuration
 
-The repo includes:
-
-- [`Dockerfile`](../../Dockerfile) — production multi-stage build (UI + server)
-- [`railway.toml`](../../railway.toml) — Dockerfile builder, `/api/health` healthcheck, 300s timeout
+| File | Purpose |
+|------|---------|
+| [`Dockerfile`](../../Dockerfile) | Production multi-stage build (UI + server). No `VOLUME` instruction. |
+| [`railway.toml`](../../railway.toml) | Dockerfile builder, `/api/health` healthcheck, 300s timeout |
+| [`docker/railway.env.example`](../../docker/railway.env.example) | Copy-paste env var template |
 
 ## Required environment variables
 
@@ -37,7 +38,7 @@ Set these on the **Paperclip app service** (not Postgres):
 
 | Variable | Value |
 |----------|-------|
-| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (use your Postgres service name) |
+| `DATABASE_URL` | `${{Postgres.DATABASE_URL}}` (match your Postgres service name) |
 | `BETTER_AUTH_SECRET` | Random secret (`openssl rand -hex 32`) — keep stable across deploys |
 | `PAPERCLIP_PUBLIC_URL` | `https://<your-railway-or-custom-domain>` |
 | `PAPERCLIP_DEPLOYMENT_MODE` | `authenticated` |
@@ -50,8 +51,6 @@ Set these on the **Paperclip app service** (not Postgres):
 
 Do **not** hardcode `PORT`. Railway injects it and the server reads `process.env.PORT`.
 
-See [`docker/railway.env.example`](../../docker/railway.env.example) for a copy-paste template.
-
 Public mode **requires** `DATABASE_URL`; embedded PostgreSQL is refused at startup. See [`deployment-modes.md`](deployment-modes.md).
 
 ## Volume
@@ -61,23 +60,19 @@ Attach a Railway volume to the app service:
 - **Mount path:** `/paperclip`
 - **Purpose:** uploads, secrets master key file, instance config, workspace data
 
-The Dockerfile sets `PAPERCLIP_HOME=/paperclip`. Without a volume, this data is lost on redeploy.
+The Dockerfile sets `PAPERCLIP_HOME=/paperclip` and does **not** use a Docker `VOLUME` instruction (Railway rejects `VOLUME` at build time). Without a Railway volume at `/paperclip`, this data is lost on redeploy.
 
-## Switch from public Docker image to GitHub build
+## Connect GitHub and deploy
 
-1. **Prepare the fork** — push Dockerfile fix, updated lockfile, and `railway.toml` to the deploy branch (`Common-Waste-Technology/paperclip`, branch `master`).
-2. **Repoint the app service** — Settings → Source → connect this GitHub repo and branch.
-3. **Confirm build settings** — builder: Dockerfile at repo root (or `RAILWAY_DOCKERFILE_PATH=Dockerfile`).
-4. **Remove** the old public Docker image source.
-5. **Keep Postgres** — ensure `DATABASE_URL=${{Postgres.DATABASE_URL}}` still references your Postgres service.
-6. **Keep the volume** — mount path `/paperclip` unchanged so existing data persists.
-7. **Verify env vars** — especially `PAPERCLIP_PUBLIC_URL=[domain_here]` (or your custom domain).
+1. Push changes to `Common-Waste-Technology/paperclip` on `master`.
+2. In Railway: app service → **Settings → Source** → connect this GitHub repo and branch.
+3. Confirm builder: **Dockerfile** at repo root (or `RAILWAY_DOCKERFILE_PATH=Dockerfile`).
+4. Add **Postgres** if not already present; wire `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+5. Attach volume at `/paperclip`.
+6. Set env vars (especially `PAPERCLIP_PUBLIC_URL`).
+7. Deploy.
 
-The Railway CLI **cannot** switch an existing service from image to GitHub repo; the dashboard Source step is required for auto-build on push. Use `railway up` for immediate deploys from a local checkout.
-
-### Rollback
-
-If the fork build fails, revert the service source to the public Docker image in Railway settings. Postgres and volume are independent of build source.
+Use `railway up` from a linked local checkout for ad-hoc deploys without pushing.
 
 ## First deploy validation
 
@@ -89,7 +84,7 @@ curl -fsS https://<your-domain>/api/health
 # {"status":"ok"}
 ```
 
-3. Open the UI and sign in with your existing account (if migrating an existing stack).
+3. Open the UI and sign in.
 
 ## Bootstrap instance admin (fresh database only)
 
@@ -100,13 +95,21 @@ railway link   # select project and Paperclip service
 railway run pnpm paperclipai auth bootstrap-ceo
 ```
 
-Follow the printed invite URL. Skip this if you are migrating an existing Railway stack with users already in Postgres.
+Follow the printed invite URL. Skip this if Postgres already has users from a prior deploy.
 
 ## Custom domain
 
 1. Add the domain under the app service → Settings → Networking.
 2. Update `PAPERCLIP_PUBLIC_URL` to the exact HTTPS URL users visit.
 3. Redeploy if auth callbacks fail after a domain change.
+
+## Migrating from upstream public Docker image
+
+If you previously ran the upstream `paperclipai/paperclip` public image on Railway:
+
+1. Repoint the app service source to this repo (dashboard Source step required).
+2. Keep Postgres and the `/paperclip` volume unchanged.
+3. Verify env vars match the table above.
 
 ## Optional: S3 storage
 
@@ -116,13 +119,13 @@ For multi-replica deployments later, configure S3-compatible storage instead of 
 
 ```sh
 node ./scripts/check-docker-deps-stage.mjs
-docker build -t paperclip-fork-test .
+docker build -t paperclip-railway-test .
 ```
 
 ## Limitations
 
 - Local CLI adapters (Claude, Codex, etc.) run **inside** the container. They do not access your laptop filesystem.
-- Fork-only adapters (e.g. `codex-openrouter-local`) require building from this repo — they are not in the upstream public image.
+- Fork-only adapters (e.g. `codex-openrouter-local`) require building from this repo.
 - Long Docker builds may need adequate Railway plan memory.
 
 ## Related docs
@@ -130,5 +133,4 @@ docker build -t paperclip-fork-test .
 - [Deployment modes](deployment-modes.md)
 - [Environment variables](environment-variables.md)
 - [Database](database.md)
-- [AWS ECS Fargate](aws-ecs.md) — alternative cloud reference
-- [`doc/DOCKER.md`](../../doc/DOCKER.md) — Docker quickstart and auth URL behavior
+- [RAILWAY.md](../../RAILWAY.md)

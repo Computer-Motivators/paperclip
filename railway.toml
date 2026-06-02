@@ -1,3 +1,5 @@
+# Railway service config for Common-Waste Paperclip.
+# Connect this repo in the Railway dashboard; pushes to the linked branch auto-deploy.
 [build]
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile"

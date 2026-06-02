@@ -48,7 +48,7 @@ This auto-onboards if config is missing, runs health checks with auto-repair, an
 
 ## What's Next
 
-Once Paperclip is running:
+Once Paperclip is running locally:
 
 1. Create your first company in the web UI
 2. Define a company goal
@@ -56,6 +56,10 @@ Once Paperclip is running:
 4. Build out the org chart with more agents
 5. Set budgets and assign initial tasks
 6. Hit go — agents start their heartbeats and the company runs
+
+## Production (Railway)
+
+This fork's production stack runs on Railway. See [RAILWAY.md](../../RAILWAY.md) for Postgres, volume, and env setup.
 
 <Card title="Core Concepts" href="/start/core-concepts">
   Learn the key concepts behind Paperclip

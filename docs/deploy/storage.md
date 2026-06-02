@@ -15,6 +15,8 @@ Files are stored at:
 
 No configuration required. Suitable for local development and single-machine deployments.
 
+On Railway, attach a volume at `/paperclip` (see [Railway guide](railway.md)).
+
 ## S3-Compatible Storage
 
 For production or multi-node deployments, use S3-compatible object storage (AWS S3, MinIO, Cloudflare R2, etc.).

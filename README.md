@@ -276,6 +276,14 @@ Paperclip is a full control plane, not a wrapper. Before you build any of this y
 
 <br/>
 
+## Production (Railway)
+
+This fork deploys to [Railway](https://railway.com) from GitHub. See **[RAILWAY.md](RAILWAY.md)** for the checklist (Postgres plugin, `/paperclip` volume, env vars, health check).
+
+Local development stays on `pnpm dev` with embedded Postgres — no Railway account required for hacking on the codebase.
+
+<br/>
+
 ## Quickstart
 
 Open source. Self-hosted. No Paperclip account required.
@@ -312,9 +320,9 @@ This starts the API server at `http://localhost:3100`. An embedded PostgreSQL da
 ## FAQ
 
 **What does a typical setup look like?**
-Locally, a single Node.js process manages an embedded Postgres and local file storage. For production, point it at your own Postgres and deploy however you like. Configure projects, agents, and goals — the agents take care of the rest.
+Locally, a single Node.js process manages an embedded Postgres and local file storage. **Production for this fork runs on Railway** with managed Postgres and a volume at `/paperclip` — see [RAILWAY.md](RAILWAY.md).
 
-If you're a solo entrepreneur you can use Tailscale to access Paperclip on the go. Then later you can deploy to e.g. Vercel when you need it.
+If you're a solo operator, you can also use Tailscale for private access without a cloud deploy.
 
 **Can I run multiple companies?**
 Yes. A single deployment can run an unlimited number of companies with complete data isolation.

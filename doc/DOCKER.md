@@ -1,5 +1,7 @@
 # Docker Quickstart
 
+> **Production:** this fork deploys on [Railway](../RAILWAY.md). Use Docker locally to test the same image Railway builds — see [docs/deploy/docker.md](../docs/deploy/docker.md).
+
 Run Paperclip in Docker without installing Node or pnpm locally.
 
 All commands below assume you are in the **project root** (the directory containing `package.json`), not inside `docker/`.

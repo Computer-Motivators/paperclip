@@ -1,11 +1,11 @@
 ---
 title: Database
-summary: Embedded PGlite vs Docker Postgres vs hosted
+summary: Embedded PGlite vs local Docker vs Railway Postgres
 ---
 
-Paperclip uses PostgreSQL via Drizzle ORM. There are three ways to run the database.
+Paperclip uses PostgreSQL via Drizzle ORM.
 
-## 1. Embedded PostgreSQL (Default)
+## 1. Embedded PostgreSQL (Default — local dev)
 
 Zero config. If you don't set `DATABASE_URL`, the server starts an embedded PostgreSQL instance automatically.
 
@@ -21,8 +21,6 @@ On first start, the server:
 4. Starts serving requests
 
 Data persists across restarts. To reset: `rm -rf ~/.paperclip/instances/default/db`.
-
-The Docker quickstart also uses embedded PostgreSQL by default.
 
 ## 2. Local PostgreSQL (Docker)
 
@@ -46,32 +44,22 @@ DATABASE_URL=postgres://paperclip:paperclip@localhost:5432/paperclip \
   npx drizzle-kit push
 ```
 
-## 3. Hosted PostgreSQL (Supabase)
+## 3. Railway Postgres (Production)
 
-For production, use a hosted provider like [Supabase](https://supabase.com/).
+Production for this fork uses Railway's managed Postgres plugin.
 
-1. Create a project at [database.new](https://database.new)
-2. Copy the connection string from Project Settings > Database
-3. Set `DATABASE_URL` in your `.env`
+1. Add Postgres to your Railway project.
+2. On the app service, set `DATABASE_URL=${{Postgres.DATABASE_URL}}`.
+3. Set `PAPERCLIP_MIGRATION_AUTO_APPLY=true` so migrations run on deploy.
 
-Use the **direct connection** (port 5432) for migrations and the **pooled connection** (port 6543) for the application.
-
-If using connection pooling, disable prepared statements:
-
-```ts
-// packages/db/src/client.ts
-export function createDb(url: string) {
-  const sql = postgres(url, { prepare: false });
-  return drizzlePg(sql, { schema });
-}
-```
+See [Railway guide](railway.md) and [RAILWAY.md](../../RAILWAY.md).
 
 ## Switching Between Modes
 
 | `DATABASE_URL` | Mode |
 |----------------|------|
-| Not set | Embedded PostgreSQL |
+| Not set | Embedded PostgreSQL (local dev) |
 | `postgres://...localhost...` | Local Docker PostgreSQL |
-| `postgres://...supabase.com...` | Hosted Supabase |
+| `${{Postgres.DATABASE_URL}}` on Railway | Production |
 
 The Drizzle schema (`packages/db/src/schema/`) is the same regardless of mode.

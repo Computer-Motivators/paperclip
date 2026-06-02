@@ -1,4 +1,6 @@
 # syntax=docker/dockerfile:1.20
+# Production image for Railway (Common-Waste fork).
+# Do not add Docker VOLUME — Railway rejects it; attach a Railway volume at /paperclip instead.
 FROM node:lts-trixie-slim AS base
 ARG USER_UID=1000
 ARG USER_GID=1000
@@ -79,10 +81,10 @@ ENV NODE_ENV=production \
   USER_GID=${USER_GID} \
   PAPERCLIP_CONFIG=/paperclip/instances/default/config.json \
   PAPERCLIP_DEPLOYMENT_MODE=authenticated \
-  PAPERCLIP_DEPLOYMENT_EXPOSURE=private \
+  PAPERCLIP_DEPLOYMENT_EXPOSURE=public \
+  PAPERCLIP_MIGRATION_AUTO_APPLY=true \
   OPENCODE_ALLOW_ALL_MODELS=true
 
-VOLUME ["/paperclip"]
 EXPOSE 3100
 
 ENTRYPOINT ["docker-entrypoint.sh"]

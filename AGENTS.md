@@ -219,3 +219,14 @@ PR #2218 (`feat/external-adapter-phase1`) adds external adapter support. See roo
 - `createServerAdapter()` must include ALL optional fields (especially `detectModel`)
 - Built-in UI adapters can shadow external plugin parsers — remove built-in when fully externalizing
 - Reference external adapters: Hermes (`@henkey/hermes-paperclip-adapter` or `file:`) and Droid (npm)
+
+## 12. Production (Railway)
+
+This fork (`Common-Waste-Technology/paperclip`) deploys to **Railway only** for production.
+
+- **Build:** root `Dockerfile` via `railway.toml` (no Docker `VOLUME` — use a Railway volume at `/paperclip`)
+- **Database:** Railway Postgres → `DATABASE_URL=${{Postgres.DATABASE_URL}}`
+- **Defaults:** `authenticated` + `public`, `PAPERCLIP_MIGRATION_AUTO_APPLY=true`
+- **Docs:** [RAILWAY.md](RAILWAY.md), [docs/deploy/railway.md](docs/deploy/railway.md)
+- **Env template:** [docker/railway.env.example](docker/railway.env.example)
+- Do not reintroduce AWS ECS deploy artifacts or generic cloud runbooks in this fork unless explicitly requested
