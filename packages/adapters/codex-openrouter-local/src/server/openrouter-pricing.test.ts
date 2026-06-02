@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { estimateOpenRouterCostUsd } from "./openrouter-pricing.js";
+import { estimateOpenRouterCostUsd, resolveOpenRouterRunCostUsd } from "./openrouter-pricing.js";
 
 describe("estimateOpenRouterCostUsd", () => {
   const pricing = {
@@ -51,5 +51,22 @@ describe("estimateOpenRouterCostUsd", () => {
       },
     );
     expect(cost).toBeCloseTo(0.000527, 9);
+  });
+});
+
+describe("resolveOpenRouterRunCostUsd", () => {
+  it("preserves explicit parsed zero cost", async () => {
+    const cost = await resolveOpenRouterRunCostUsd({
+      modelId: "openai/gpt-5.4-mini",
+      usage: {
+        inputTokens: 50,
+        cachedInputTokens: 0,
+        outputTokens: 20,
+      },
+      parsedCostUsd: 0,
+      apiKey: "test-key",
+    });
+
+    expect(cost).toBe(0);
   });
 });

@@ -147,7 +147,7 @@ export async function resolveOpenRouterRunCostUsd(input: {
   parsedCostUsd?: number | null;
   apiKey?: string | null;
 }): Promise<number | null> {
-  if (typeof input.parsedCostUsd === "number" && Number.isFinite(input.parsedCostUsd) && input.parsedCostUsd > 0) {
+  if (typeof input.parsedCostUsd === "number" && Number.isFinite(input.parsedCostUsd) && input.parsedCostUsd >= 0) {
     return input.parsedCostUsd;
   }
 
