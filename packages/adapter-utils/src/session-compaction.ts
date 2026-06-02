@@ -40,6 +40,7 @@ export const LEGACY_SESSIONED_ADAPTER_TYPES = new Set([
   "acpx_local",
   "claude_local",
   "codex_local",
+  "codex_openrouter_local",
   "cursor_cloud",
   "cursor",
   "gemini_local",
@@ -60,6 +61,11 @@ export const ADAPTER_SESSION_MANAGEMENT: Record<string, AdapterSessionManagement
     defaultSessionCompaction: ADAPTER_MANAGED_SESSION_POLICY,
   },
   codex_local: {
+    supportsSessionResume: true,
+    nativeContextManagement: "confirmed",
+    defaultSessionCompaction: ADAPTER_MANAGED_SESSION_POLICY,
+  },
+  codex_openrouter_local: {
     supportsSessionResume: true,
     nativeContextManagement: "confirmed",
     defaultSessionCompaction: ADAPTER_MANAGED_SESSION_POLICY,

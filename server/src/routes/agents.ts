@@ -88,6 +88,10 @@ import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
 } from "@paperclipai/adapter-codex-local";
+import {
+  DEFAULT_CODEX_OPENROUTER_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
+  DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL,
+} from "@computermotivators/adapter-codex-openrouter-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { DEFAULT_OPENCODE_LOCAL_MODEL } from "@paperclipai/adapter-opencode-local";
@@ -126,6 +130,7 @@ export function agentRoutes(
     acpx_local: "instructionsFilePath",
     claude_local: "instructionsFilePath",
     codex_local: "instructionsFilePath",
+    codex_openrouter_local: "instructionsFilePath",
     droid_local: "instructionsFilePath",
     gemini_local: "instructionsFilePath",
     hermes_local: "instructionsFilePath",
@@ -1016,6 +1021,19 @@ export function agentRoutes(
         typeof next.dangerouslyBypassSandbox === "boolean";
       if (!hasBypassFlag) {
         next.dangerouslyBypassApprovalsAndSandbox = DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
+      }
+      return ensureGatewayDeviceKey(adapterType, next);
+    }
+    if (adapterType === "codex_openrouter_local") {
+      if (!asNonEmptyString(next.model)) {
+        next.model = DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL;
+      }
+      const hasBypassFlag =
+        typeof next.dangerouslyBypassApprovalsAndSandbox === "boolean" ||
+        typeof next.dangerouslyBypassSandbox === "boolean";
+      if (!hasBypassFlag) {
+        next.dangerouslyBypassApprovalsAndSandbox =
+          DEFAULT_CODEX_OPENROUTER_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
       }
       return ensureGatewayDeviceKey(adapterType, next);
     }

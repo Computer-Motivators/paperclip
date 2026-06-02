@@ -631,6 +631,10 @@ const ADAPTER_DEFAULT_RULES_BY_TYPE: Record<string, Array<{ path: string[]; valu
     { path: ["timeoutSec"], value: 0 },
     { path: ["graceSec"], value: 15 },
   ],
+  codex_openrouter_local: [
+    { path: ["timeoutSec"], value: 0 },
+    { path: ["graceSec"], value: 15 },
+  ],
   gemini_local: [
     { path: ["timeoutSec"], value: 0 },
     { path: ["graceSec"], value: 15 },
@@ -760,7 +764,7 @@ function applyImportAdapterRunDefaults(
   adapterConfig: Record<string, unknown>,
 ) {
   const next = { ...adapterConfig };
-  if (adapterType === "codex_local") {
+  if (adapterType === "codex_local" || adapterType === "codex_openrouter_local") {
     appendCodexImportArg(next, "--skip-git-repo-check");
   }
   return next;

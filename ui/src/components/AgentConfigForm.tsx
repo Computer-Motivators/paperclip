@@ -18,6 +18,10 @@ import {
   DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
   DEFAULT_CODEX_LOCAL_MODEL,
 } from "@paperclipai/adapter-codex-local";
+import {
+  DEFAULT_CODEX_OPENROUTER_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
+  DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL,
+} from "@computermotivators/adapter-codex-openrouter-local";
 import { DEFAULT_CURSOR_LOCAL_MODEL } from "@paperclipai/adapter-cursor-local";
 import { DEFAULT_GEMINI_LOCAL_MODEL } from "@paperclipai/adapter-gemini-local";
 import { DEFAULT_OPENCODE_LOCAL_MODEL } from "@paperclipai/adapter-opencode-local";
@@ -114,8 +118,16 @@ const emptyOverlay: AgentConfigOverlay = {
 /** Stable empty object used as fallback for missing env config to avoid new-object-per-render. */
 const EMPTY_ENV: Record<string, EnvBinding> = {};
 
+function isCodexFamilyAdapter(adapterType: string): boolean {
+  return adapterType === "codex_local" || adapterType === "codex_openrouter_local";
+}
+
 export function supportsAdapterModelRefresh(adapterType: string): boolean {
-  return adapterType === "claude_local" || adapterType === "codex_local" || adapterType === "acpx_local";
+  return (
+    adapterType === "claude_local" ||
+    isCodexFamilyAdapter(adapterType) ||
+    adapterType === "acpx_local"
+  );
 }
 
 function isOverlayDirty(o: AgentConfigOverlay): boolean {
@@ -542,7 +554,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
   }
 
   const thinkingEffortKey =
-    adapterType === "codex_local"
+    isCodexFamilyAdapter(adapterType)
       ? "modelReasoningEffort"
       : adapterType === "acpx_local" && acpxAgent === "codex"
         ? "modelReasoningEffort"
@@ -552,7 +564,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             ? "variant"
             : "effort";
   const thinkingEffortOptions =
-    adapterType === "codex_local"
+    isCodexFamilyAdapter(adapterType)
       ? codexThinkingEffortOptions
       : adapterType === "acpx_local" && acpxAgent === "codex"
         ? codexThinkingEffortOptions
@@ -563,7 +575,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             : claudeThinkingEffortOptions;
   const currentThinkingEffort = isCreate
     ? val!.thinkingEffort
-    : adapterType === "codex_local"
+    : isCodexFamilyAdapter(adapterType)
       ? eff(
           "adapterConfig",
           "modelReasoningEffort",
@@ -581,7 +593,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
             ? eff("adapterConfig", "variant", String(config.variant ?? ""))
             : eff("adapterConfig", "effort", String(config.effort ?? ""));
   const showThinkingEffort = adapterType !== "gemini_local" && adapterType !== "cursor_cloud";
-  const codexSearchEnabled = adapterType === "codex_local"
+  const codexSearchEnabled = isCodexFamilyAdapter(adapterType)
     ? (isCreate ? Boolean(val!.search) : eff("adapterConfig", "search", Boolean(config.search)))
     : false;
   // Cheap profile read/write helpers. Edit-mode values come from
@@ -855,7 +867,13 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                       nextValues.model = DEFAULT_CODEX_LOCAL_MODEL;
                       nextValues.dangerouslyBypassSandbox =
                         DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
-                    } else if (t === "gemini_local") {
+                    }
+                    if (t === "codex_openrouter_local") {
+                      nextValues.model = DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL;
+                      nextValues.dangerouslyBypassSandbox =
+                        DEFAULT_CODEX_OPENROUTER_LOCAL_BYPASS_APPROVALS_AND_SANDBOX;
+                    }
+                    if (t === "gemini_local") {
                       nextValues.model = DEFAULT_GEMINI_LOCAL_MODEL;
                     } else if (t === "cursor") {
                       nextValues.model = DEFAULT_CURSOR_LOCAL_MODEL;
@@ -874,6 +892,8 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                         model:
                           t === "codex_local"
                             ? DEFAULT_CODEX_LOCAL_MODEL
+                            : t === "codex_openrouter_local"
+                              ? DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL
                             : t === "gemini_local"
                               ? DEFAULT_GEMINI_LOCAL_MODEL
                             : t === "opencode_local"
@@ -889,6 +909,11 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                           ? {
                               dangerouslyBypassApprovalsAndSandbox:
                                 DEFAULT_CODEX_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
+                            }
+                          : t === "codex_openrouter_local"
+                          ? {
+                              dangerouslyBypassApprovalsAndSandbox:
+                                DEFAULT_CODEX_OPENROUTER_LOCAL_BYPASS_APPROVALS_AND_SANDBOX,
                             }
                           : {}),
                       },
@@ -975,6 +1000,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     ({
                       claude_local: "claude",
                       codex_local: "codex",
+                      codex_openrouter_local: "codex",
                       gemini_local: "gemini",
                       pi_local: "pi",
                       cursor: "agent",
@@ -1061,7 +1087,7 @@ export function AgentConfigForm(props: AgentConfigFormProps) {
                     open={thinkingEffortOpen}
                     onOpenChange={setThinkingEffortOpen}
                   />
-                  {adapterType === "codex_local" &&
+                  {isCodexFamilyAdapter(adapterType) &&
                     codexSearchEnabled &&
                     currentThinkingEffort === "minimal" && (
                       <p className="text-xs text-amber-400">

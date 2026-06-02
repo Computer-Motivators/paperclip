@@ -2,6 +2,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { models as claudeFallbackModels } from "@paperclipai/adapter-claude-local";
 import { resetClaudeModelsCacheForTests } from "@paperclipai/adapter-claude-local/server";
 import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
+import { models as codexOpenRouterFallbackModels } from "@computermotivators/adapter-codex-openrouter-local";
+import { resetCodexOpenRouterModelsCacheForTests } from "../adapters/codex-openrouter-models.js";
 import { models as cursorFallbackModels } from "@paperclipai/adapter-cursor-local";
 import { models as opencodeFallbackModels } from "@paperclipai/adapter-opencode-local";
 import { resetOpenCodeModelsCacheForTests } from "@paperclipai/adapter-opencode-local/server";
@@ -19,6 +21,7 @@ vi.mock("acpx/runtime", () => ({
 describe("adapter model listing", () => {
   beforeEach(() => {
     delete process.env.OPENAI_API_KEY;
+    delete process.env.OPENROUTER_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.ANTHROPIC_BASE_URL;
     delete process.env.ANTHROPIC_BEDROCK_BASE_URL;
@@ -26,6 +29,7 @@ describe("adapter model listing", () => {
     delete process.env.PAPERCLIP_OPENCODE_COMMAND;
     resetClaudeModelsCacheForTests();
     resetCodexModelsCacheForTests();
+    resetCodexOpenRouterModelsCacheForTests();
     resetCursorModelsCacheForTests();
     setCursorModelsRunnerForTests(null);
     resetOpenCodeModelsCacheForTests();
@@ -49,6 +53,14 @@ describe("adapter model listing", () => {
     const models = await listAdapterModels("codex_local");
 
     expect(models).toEqual(codexFallbackModels);
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
+  it("returns codex openrouter fallback models when no OpenRouter key is available", async () => {
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const models = await listAdapterModels("codex_openrouter_local");
+
+    expect(models).toEqual(codexOpenRouterFallbackModels);
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 

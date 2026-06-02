@@ -49,6 +49,18 @@ import {
   modelProfiles as codexModelProfiles,
 } from "@paperclipai/adapter-codex-local";
 import {
+  execute as codexOpenRouterExecute,
+  listCodexSkills as listCodexOpenRouterSkills,
+  syncCodexSkills as syncCodexOpenRouterSkills,
+  testEnvironment as codexOpenRouterTestEnvironment,
+  sessionCodec as codexOpenRouterSessionCodec,
+} from "@computermotivators/adapter-codex-openrouter-local/server";
+import {
+  agentConfigurationDoc as codexOpenRouterAgentConfigurationDoc,
+  models as codexOpenRouterModels,
+  modelProfiles as codexOpenRouterModelProfiles,
+} from "@computermotivators/adapter-codex-openrouter-local";
+import {
   execute as cursorExecute,
   listCursorSkills,
   syncCursorSkills,
@@ -112,6 +124,10 @@ import {
   models as openclawGatewayModels,
 } from "@paperclipai/adapter-openclaw-gateway";
 import { listCodexModels, refreshCodexModels } from "./codex-models.js";
+import {
+  listCodexOpenRouterModels,
+  refreshCodexOpenRouterModels,
+} from "./codex-openrouter-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
   execute as piExecute,
@@ -307,6 +323,26 @@ const codexLocalAdapter: ServerAdapterModule = {
   getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "codex", "@openai/codex"),
   agentConfigurationDoc: codexAgentConfigurationDoc,
   getQuotaWindows: codexGetQuotaWindows,
+};
+
+const codexOpenRouterLocalAdapter: ServerAdapterModule = {
+  type: "codex_openrouter_local",
+  execute: codexOpenRouterExecute,
+  testEnvironment: codexOpenRouterTestEnvironment,
+  listSkills: listCodexOpenRouterSkills,
+  syncSkills: syncCodexOpenRouterSkills,
+  sessionCodec: codexOpenRouterSessionCodec,
+  sessionManagement: getAdapterSessionManagement("codex_openrouter_local") ?? undefined,
+  models: codexOpenRouterModels,
+  modelProfiles: codexOpenRouterModelProfiles,
+  listModels: listCodexOpenRouterModels,
+  refreshModels: refreshCodexOpenRouterModels,
+  supportsLocalAgentJwt: true,
+  supportsInstructionsBundle: true,
+  instructionsPathKey: "instructionsFilePath",
+  requiresMaterializedRuntimeSkills: false,
+  getRuntimeCommandSpec: (config) => buildNpmRuntimeCommandSpec(config, "codex", "@openai/codex"),
+  agentConfigurationDoc: codexOpenRouterAgentConfigurationDoc,
 };
 
 const cursorLocalAdapter: ServerAdapterModule = {
@@ -515,6 +551,7 @@ function registerBuiltInAdapters() {
     acpxLocalAdapter,
     claudeLocalAdapter,
     codexLocalAdapter,
+    codexOpenRouterLocalAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
     cursorCloudAdapter,

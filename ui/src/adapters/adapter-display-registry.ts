@@ -73,6 +73,11 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     icon: Code,
     recommended: true,
   },
+  codex_openrouter_local: {
+    label: "Codex (OpenRouter)",
+    description: "Local Codex agent routed through OpenRouter",
+    icon: Code,
+  },
   gemini_local: {
     label: "Gemini CLI",
     description: "Local Gemini agent",

@@ -37,6 +37,9 @@ importers:
       '@clack/prompts':
         specifier: ^0.10.0
         version: 0.10.1
+      '@computermotivators/adapter-codex-openrouter-local':
+        specifier: workspace:*
+        version: link:../packages/adapters/codex-openrouter-local
       '@paperclipai/adapter-acpx-local':
         specifier: workspace:*
         version: link:../packages/adapters/acpx-local
@@ -156,6 +159,22 @@ importers:
         version: 5.9.3
 
   packages/adapters/codex-local:
+    dependencies:
+      '@paperclipai/adapter-utils':
+        specifier: workspace:*
+        version: link:../../adapter-utils
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.6.0
+        version: 24.12.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+
+  packages/adapters/codex-openrouter-local:
     dependencies:
       '@paperclipai/adapter-utils':
         specifier: workspace:*
@@ -622,11 +641,16 @@ importers:
         specifier: ^5.7.3
         version: 5.9.3
 
+  packages/skills-catalog: {}
+
   server:
     dependencies:
       '@aws-sdk/client-s3':
         specifier: ^3.888.0
         version: 3.994.0
+      '@computermotivators/adapter-codex-openrouter-local':
+        specifier: workspace:*
+        version: link:../packages/adapters/codex-openrouter-local
       '@paperclipai/adapter-acpx-local':
         specifier: workspace:*
         version: link:../packages/adapters/acpx-local
@@ -778,6 +802,9 @@ importers:
       '@assistant-ui/react':
         specifier: 0.12.23
         version: 0.12.23(@types/react-dom@19.2.3(@types/react@19.2.14))(@types/react@19.2.14)(react-dom@19.2.4(react@19.2.4))(react@19.2.4)(use-sync-external-store@1.6.0(react@19.2.4))
+      '@computermotivators/adapter-codex-openrouter-local':
+        specifier: workspace:*
+        version: link:../packages/adapters/codex-openrouter-local
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
