@@ -19,6 +19,8 @@ export function parseCodexJsonl(stdout: string) {
     inputTokens: 0,
     cachedInputTokens: 0,
     outputTokens: 0,
+    reasoningTokens: 0,
+    requestCount: 0,
   };
   let costUsd: number | null = null;
 
@@ -55,6 +57,11 @@ export function parseCodexJsonl(stdout: string) {
       usage.inputTokens = asNumber(usageObj.input_tokens, usage.inputTokens);
       usage.cachedInputTokens = asNumber(usageObj.cached_input_tokens, usage.cachedInputTokens);
       usage.outputTokens = asNumber(usageObj.output_tokens, usage.outputTokens);
+      usage.reasoningTokens = asNumber(
+        usageObj.reasoning_output_tokens,
+        asNumber(usageObj.reasoning_tokens, usage.reasoningTokens),
+      );
+      usage.requestCount += 1;
       const turnCostUsd = asNumber(event.total_cost_usd, 0);
       if (turnCostUsd > 0) {
         costUsd = (costUsd ?? 0) + turnCostUsd;

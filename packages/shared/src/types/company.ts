@@ -1,4 +1,6 @@
 import type { CompanyStatus, PauseReason } from "../constants.js";
+import type { Agent } from "./agent.js";
+import type { Issue } from "./issue.js";
 
 export interface Company {
   id: string;
@@ -22,4 +24,9 @@ export interface Company {
   logoUrl: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export interface BoardChatState {
+  issue: Issue | null;
+  agent: Agent | null;
 }

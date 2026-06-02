@@ -24,6 +24,7 @@ describe("codex-openrouter-home", () => {
     expect(toml).toContain("[model_providers.openrouter]");
     expect(toml).toContain("https://openrouter.ai/api/v1");
     expect(toml).toContain('env_key = "OPENROUTER_API_KEY"');
+    expect(toml).toContain('env_http_headers = { "X-Session-Id" = "OPENROUTER_SESSION_ID"');
   });
 
   it("writes auth.json with OPENROUTER_API_KEY only", async () => {

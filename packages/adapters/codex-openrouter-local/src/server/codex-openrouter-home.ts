@@ -45,6 +45,7 @@ export function buildOpenRouterConfigToml(modelReasoningEffort?: string | null):
     'name = "openrouter"',
     `base_url = "${OPENROUTER_API_BASE_URL}"`,
     'env_key = "OPENROUTER_API_KEY"',
+    'env_http_headers = { "X-Session-Id" = "OPENROUTER_SESSION_ID", "HTTP-Referer" = "OPENROUTER_HTTP_REFERER", "X-OpenRouter-Title" = "OPENROUTER_TITLE" }',
     "",
   ]
     .filter((line, index, arr) => !(line === "" && index === arr.length - 1))

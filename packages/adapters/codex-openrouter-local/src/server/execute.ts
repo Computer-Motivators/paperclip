@@ -84,6 +84,21 @@ function firstNonEmptyLine(text: string): string {
   );
 }
 
+function normalizeOpenRouterModelId(modelId: string): string {
+  return modelId.trim().replace(/^~/, "");
+}
+
+function resolveOpenRouterUpstreamProvider(modelId: string): string {
+  const normalized = normalizeOpenRouterModelId(modelId);
+  const slash = normalized.indexOf("/");
+  if (slash > 0) return normalized.slice(0, slash).trim().toLowerCase();
+  return "openrouter";
+}
+
+function truncateTraceValue(value: string, limit = 128): string {
+  return value.length <= limit ? value : value.slice(0, limit);
+}
+
 async function isLikelyPaperclipRepoRoot(candidate: string): Promise<boolean> {
   const [hasWorkspace, hasPackageJson, hasServerDir, hasAdapterUtilsDir] = await Promise.all([
     pathExists(path.join(candidate, "pnpm-workspace.yaml")),
@@ -283,6 +298,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   );
   const command = asString(config.command, "codex");
   const model = asString(config.model, "");
+  const normalizedModel = normalizeOpenRouterModelId(model);
+  const provider = resolveOpenRouterUpstreamProvider(normalizedModel);
 
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceCwd = asString(workspaceContext.cwd, "");
@@ -500,6 +517,12 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   if (runtimePrimaryUrl) {
     env.PAPERCLIP_RUNTIME_PRIMARY_URL = runtimePrimaryUrl;
   }
+  const traceIssueId = asString(context.issueId, "").trim();
+  const traceSessionSeed = runtime.sessionId ??
+    (traceIssueId ? `issue:${traceIssueId}` : `run:${runId}`);
+  env.OPENROUTER_SESSION_ID = truncateTraceValue(`pc:${agent.companyId}:${agent.id}:${traceSessionSeed}`);
+  env.OPENROUTER_HTTP_REFERER = "https://agents.commonwaste.com";
+  env.OPENROUTER_TITLE = "Common Waste Paperclip";
   env.CODEX_HOME = remoteCodexHome ?? effectiveCodexHome;
   if (configuredOpenRouterApiKey) {
     env.OPENROUTER_API_KEY = configuredOpenRouterApiKey;
@@ -812,9 +835,9 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       sessionId: resolvedSessionId,
       sessionParams: resolvedSessionParams,
       sessionDisplayId: resolvedSessionId,
-      provider: "openrouter",
+      provider,
       biller: "openrouter",
-      model,
+      model: normalizedModel || model,
       billingType,
       costUsd,
       resultJson: {
@@ -831,7 +854,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
 
   const resolveAttemptCostUsd = async (parsed: ReturnType<typeof parseCodexJsonl>) =>
     resolveOpenRouterRunCostUsd({
-      modelId: model,
+      modelId: normalizedModel || model,
       usage: parsed.usage,
       parsedCostUsd: parsed.costUsd,
       apiKey: configuredOpenRouterApiKey,

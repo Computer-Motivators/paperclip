@@ -7,12 +7,16 @@ export interface OpenRouterTokenPricing {
   promptPerToken: number;
   completionPerToken: number;
   cacheReadPerToken: number;
+  internalReasoningPerToken: number;
+  requestPerCall: number;
 }
 
 export interface UsageForPricing {
   inputTokens: number;
   cachedInputTokens: number;
   outputTokens: number;
+  reasoningTokens?: number;
+  requestCount?: number;
 }
 
 type PricingCacheEntry = {
@@ -45,10 +49,14 @@ function parseModelPricing(pricing: unknown): OpenRouterTokenPricing | null {
   if (promptPerToken <= 0 && completionPerToken <= 0) return null;
 
   const cacheReadPerToken = readPricingRate(record.input_cache_read) || promptPerToken;
+  const internalReasoningPerToken = readPricingRate(record.internal_reasoning);
+  const requestPerCall = readPricingRate(record.request);
   return {
     promptPerToken,
     completionPerToken,
     cacheReadPerToken,
+    internalReasoningPerToken,
+    requestPerCall,
   };
 }
 
@@ -118,11 +126,16 @@ export function estimateOpenRouterCostUsd(
   const cachedInputTokens = Math.min(Math.max(0, usage.cachedInputTokens), inputTokens);
   const uncachedInputTokens = Math.max(0, inputTokens - cachedInputTokens);
   const outputTokens = Math.max(0, usage.outputTokens);
+  const reasoningTokens = Math.max(0, usage.reasoningTokens ?? 0);
+  const hasTokenUsage = inputTokens > 0 || outputTokens > 0 || cachedInputTokens > 0 || reasoningTokens > 0;
+  const requestCount = Math.max(0, usage.requestCount ?? (hasTokenUsage ? 1 : 0));
 
   const cost =
     uncachedInputTokens * pricing.promptPerToken +
     cachedInputTokens * pricing.cacheReadPerToken +
-    outputTokens * pricing.completionPerToken;
+    outputTokens * pricing.completionPerToken +
+    reasoningTokens * pricing.internalReasoningPerToken +
+    requestCount * pricing.requestPerCall;
 
   if (!Number.isFinite(cost) || cost <= 0) return 0;
   return cost;

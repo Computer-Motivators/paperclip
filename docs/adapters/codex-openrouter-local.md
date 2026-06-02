@@ -53,7 +53,29 @@ Run usage reports `cachedInputTokens` when the provider returns cache read metri
 
 ## Cost Reporting
 
-Codex JSONL does not currently include `total_cost_usd` for OpenRouter-routed runs. After each run, the adapter estimates dollar cost from OpenRouter model pricing (`GET /api/v1/models`) using reported input, cache-read, and output tokens. If Codex begins emitting `total_cost_usd`, that value takes precedence over the estimate.
+Codex JSONL does not currently include `total_cost_usd` for OpenRouter-routed runs. After each run, the adapter estimates dollar cost from OpenRouter model pricing (`GET /api/v1/models`) using:
+
+- uncached prompt tokens
+- cached prompt-read tokens (`input_cache_read`)
+- output tokens
+- reasoning tokens (`internal_reasoning`, when priced)
+- per-request pricing (`request`, when priced)
+
+If Codex begins emitting `total_cost_usd`, that value takes precedence over the estimate.
+
+Provider attribution in Paperclip is derived from the configured model slug (`openai/*`, `anthropic/*`, etc.), while biller remains `openrouter`.
+
+## Session Tracking (OpenRouter Broadcast)
+
+The adapter configures OpenRouter headers through Codex provider settings (`env_http_headers`):
+
+- `X-Session-Id` from `OPENROUTER_SESSION_ID`
+- `HTTP-Referer` from `OPENROUTER_HTTP_REFERER`
+- `X-OpenRouter-Title` from `OPENROUTER_TITLE`
+
+Paperclip sets these env vars per run so OpenRouter Broadcast can group related requests by session and attribute traffic to the Paperclip app.
+
+Current limitation: Codex provider config does not expose arbitrary request-body passthrough for OpenRouter `trace` / `session_id` JSON fields, so rich `trace` metadata injection is not currently wired through this adapter.
 
 ## Model Discovery
 

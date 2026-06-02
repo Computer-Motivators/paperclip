@@ -1,0 +1,1 @@
+CREATE UNIQUE INDEX "issues_active_board_chat_uq" ON "issues" USING btree ("company_id","origin_kind","origin_id") WHERE "issues"."origin_kind" = 'board_chat' and "issues"."origin_id" is not null and "issues"."hidden_at" is not null and "issues"."status" <> 'cancelled';

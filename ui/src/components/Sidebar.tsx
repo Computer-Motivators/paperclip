@@ -10,6 +10,7 @@ import {
   Network,
   Boxes,
   Repeat,
+  MessageSquare,
   GitBranch,
   Settings,
 } from "lucide-react";
@@ -95,6 +96,7 @@ export function Sidebar() {
 
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Issues" icon={CircleDot} />
+          <SidebarNavItem to="/chat" label="Chat" icon={MessageSquare} />
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
           {showWorkspacesLink ? (

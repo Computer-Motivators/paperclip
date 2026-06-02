@@ -57,3 +57,9 @@ export const updateCompanyBrandingSchema = z
   );
 
 export type UpdateCompanyBranding = z.infer<typeof updateCompanyBrandingSchema>;
+
+export const boardChatAgentSchema = z.object({
+  agentId: z.string().uuid(),
+});
+
+export type BoardChatAgentInput = z.infer<typeof boardChatAgentSchema>;
