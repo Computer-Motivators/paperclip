@@ -48,6 +48,8 @@ Set these on the **Paperclip app service** (not Postgres):
 | `SERVE_UI` | `true` |
 | `HOST` | `0.0.0.0` |
 | `HEARTBEAT_SCHEDULER_ENABLED` | `true` (recommended) |
+| `NODE_OPTIONS` | `--max-old-space-size=512` (memory-first default) |
+| `PAPERCLIP_MEMORY_TELEMETRY_INTERVAL_MS` | `60000` (optional memory telemetry cadence) |
 
 Do **not** hardcode `PORT`. Railway injects it and the server reads `process.env.PORT`.
 

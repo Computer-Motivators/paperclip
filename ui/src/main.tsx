@@ -32,6 +32,8 @@ const queryClient = new QueryClient({
   defaultOptions: {
     queries: {
       staleTime: 30_000,
+      // Memory-first: release unused query cache quickly (default TanStack v5 is 5m).
+      gcTime: 60_000,
       refetchOnWindowFocus: true,
     },
   },

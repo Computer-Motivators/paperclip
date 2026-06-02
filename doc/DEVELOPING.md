@@ -120,6 +120,20 @@ pnpm test:e2e
 pnpm test:release-smoke
 ```
 
+## Memory Soak Check (optional)
+
+For memory-first tuning verification, run the lightweight soak script:
+
+```sh
+node --expose-gc scripts/memory-soak.mjs
+```
+
+Environment overrides:
+
+- `SOAK_SECONDS` (default `90`)
+- `SOAK_BURST_OBJECTS` (default `40000`)
+- `SOAK_BURST_INTERVAL_MS` (default `750`)
+
 These browser suites are intended for targeted local verification and CI, not the default agent/human test command.
 
 For normal issue work, start with the smallest targeted check that proves the change. Reserve repo-wide typecheck/build/test runs for PR-ready handoff or changes broad enough that narrow checks do not cover the risk.

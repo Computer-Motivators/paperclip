@@ -27,7 +27,7 @@ import type {
   PluginExecutionWorkspaceMetadata,
 } from "@paperclipai/plugin-sdk";
 import type { CreateIssueThreadInteraction, InviteJoinType, IssueDocumentSummary, PermissionKey, PrincipalType } from "@paperclipai/shared";
-import { pluginOperationIssueOriginKind } from "@paperclipai/shared";
+import { createSingleFlight, pluginOperationIssueOriginKind } from "@paperclipai/shared";
 import { companyService } from "./companies.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
@@ -350,6 +350,12 @@ function sanitizeWorkspaceName(name: string, fallbackPath: string): string {
 /** How many buffered log entries trigger an immediate flush. */
 const LOG_BUFFER_FLUSH_SIZE = 100;
 
+/** Max in-memory plugin log entries before oldest are dropped. */
+const LOG_BUFFER_MAX_ENTRIES = 500;
+
+/** Estimated max bytes retained in the plugin log buffer. */
+const LOG_BUFFER_MAX_BYTES = 2 * 1024 * 1024;
+
 /** How often (ms) the buffer is flushed regardless of size. */
 const LOG_BUFFER_FLUSH_INTERVAL_MS = 5_000;
 
@@ -410,6 +416,56 @@ interface BufferedLogEntry {
 }
 
 const _logBuffer: BufferedLogEntry[] = [];
+let _logBufferEstimatedBytes = 0;
+let _logBufferDroppedTotal = 0;
+let _logBufferDroppedSinceLastLog = 0;
+
+const _logBufferFlushFlight = createSingleFlight<void>();
+
+function estimateBufferedLogEntryBytes(entry: BufferedLogEntry): number {
+  const metaBytes = entry.meta ? JSON.stringify(entry.meta).length : 0;
+  return entry.message.length + metaBytes + 64;
+}
+
+function enqueueBufferedLogEntry(entry: BufferedLogEntry): void {
+  const entryBytes = estimateBufferedLogEntryBytes(entry);
+  while (
+    _logBuffer.length > 0
+    && (
+      _logBuffer.length >= LOG_BUFFER_MAX_ENTRIES
+      || _logBufferEstimatedBytes + entryBytes > LOG_BUFFER_MAX_BYTES
+    )
+  ) {
+    const removed = _logBuffer.shift();
+    if (!removed) break;
+    _logBufferEstimatedBytes -= estimateBufferedLogEntryBytes(removed);
+    _logBufferDroppedTotal += 1;
+    _logBufferDroppedSinceLastLog += 1;
+  }
+  _logBuffer.push(entry);
+  _logBufferEstimatedBytes += entryBytes;
+}
+
+function maybeLogBufferDrops(): void {
+  if (_logBufferDroppedSinceLastLog <= 0) return;
+  const dropped = _logBufferDroppedSinceLastLog;
+  _logBufferDroppedSinceLastLog = 0;
+  try {
+    logger.warn(
+      { dropped, droppedTotal: _logBufferDroppedTotal, bufferSize: _logBuffer.length },
+      "Dropped oldest plugin log buffer entries due to memory cap",
+    );
+  } catch {
+    console.warn(
+      `[plugin-host-services] Dropped ${dropped} buffered plugin log entries (total=${_logBufferDroppedTotal})`,
+    );
+  }
+}
+
+/** Total plugin log buffer entries dropped due to memory caps (process lifetime). */
+export function getPluginLogBufferDroppedCount(): number {
+  return _logBufferDroppedTotal;
+}
 
 /**
  * Flush all buffered log entries to the database in a single batch insert per
@@ -417,10 +473,14 @@ const _logBuffer: BufferedLogEntry[] = [];
  * flushing never crashes the process.
  */
 export async function flushPluginLogBuffer(): Promise<void> {
-  if (_logBuffer.length === 0) return;
+  return _logBufferFlushFlight.run(async () => {
+    if (_logBuffer.length === 0) return;
 
-  // Drain the buffer atomically so concurrent flushes don't double-insert.
-  const entries = _logBuffer.splice(0, _logBuffer.length);
+    maybeLogBufferDrops();
+
+    // Drain the buffer atomically so concurrent flushes don't double-insert.
+    const entries = _logBuffer.splice(0, _logBuffer.length);
+    _logBufferEstimatedBytes = 0;
 
   // Group entries by db identity so multi-db scenarios are handled correctly.
   const byDb = new Map<Db, BufferedLogEntry[]>();
@@ -450,6 +510,7 @@ export async function flushPluginLogBuffer(): Promise<void> {
       }
     }
   }
+  });
 }
 
 /** Interval handle for the periodic log flush. */
@@ -1259,7 +1320,7 @@ export function buildHostServices(
         // logger.log) so they benefit from batched writes and are flushed
         // reliably on shutdown. Using level "metric" makes them queryable
         // alongside regular logs via the same API (§26).
-        _logBuffer.push({
+        enqueueBufferedLogEntry({
           db,
           pluginId,
           level: "metric",
@@ -1307,7 +1368,7 @@ export function buildHostServices(
 
         // Persist to plugin_logs table via the module-level batch buffer (§26.1).
         // Fire-and-forget — logging should never block the worker.
-        _logBuffer.push({
+        enqueueBufferedLogEntry({
           db,
           pluginId,
           level: level ?? "info",

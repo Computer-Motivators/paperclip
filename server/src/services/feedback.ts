@@ -62,6 +62,13 @@ const MAX_PATH_CHARS = 600;
 const MAX_SKILLS = 20;
 const MAX_INSTRUCTION_FILES = 20;
 const MAX_TRACE_FILE_CHARS = 10_000_000;
+/** Max run log bytes materialized for a single feedback bundle file. */
+const FEEDBACK_RUN_LOG_BUNDLE_MAX_CHARS = 2_000_000;
+/** Max stdout chars accumulated while streaming run logs for adapter traces. */
+const FEEDBACK_RUN_LOG_MAX_STDOUT_CHARS = 4_000_000;
+/** Max run events loaded into a feedback bundle. */
+const FEEDBACK_RUN_EVENTS_MAX = 2_000;
+const FEEDBACK_RUN_LOG_READ_CHUNK_BYTES = 512_000;
 const DEFAULT_INSTANCE_SETTINGS_SINGLETON_KEY = "default";
 const FEEDBACK_EXPORT_BACKEND_NOT_CONFIGURED = "Feedback export backend is not configured";
 
@@ -315,46 +322,87 @@ async function findMatchingFile(
   return search(rootDir, 0);
 }
 
-async function readFullRunLog(run: {
-  logStore: string | null;
-  logRef: string | null;
-}) {
-  if (run.logStore !== "local_file" || !run.logRef) return null;
-  const store = getRunLogStore();
-  let offset = 0;
-  let combined = "";
+type RunLogEntry = { ts: string; stream: string; chunk: string };
 
-  while (true) {
-    const result = await store.read({ store: "local_file", logRef: run.logRef }, {
-      offset,
-      limitBytes: 512_000,
-    }).catch(() => null);
-    if (!result) return combined || null;
-    combined += result.content;
-    if (result.nextOffset == null) break;
-    offset = result.nextOffset;
+function parseRunLogLine(rawLine: string): RunLogEntry | null {
+  const line = rawLine.trim();
+  if (!line) return null;
+  try {
+    const parsed = JSON.parse(line) as { ts?: unknown; stream?: unknown; chunk?: unknown };
+    const ts = asString(parsed.ts) ?? new Date(0).toISOString();
+    const stream = asString(parsed.stream) ?? "stdout";
+    const chunk = typeof parsed.chunk === "string" ? parsed.chunk : "";
+    return { ts, stream, chunk };
+  } catch {
+    return null;
   }
-
-  return combined || null;
 }
 
-function parseRunLogEntries(logText: string | null) {
-  if (!logText) return [];
-  const entries: Array<{ ts: string; stream: string; chunk: string }> = [];
-  for (const rawLine of logText.split(/\r?\n/)) {
-    const line = rawLine.trim();
-    if (!line) continue;
-    try {
-      const parsed = JSON.parse(line) as { ts?: unknown; stream?: unknown; chunk?: unknown };
-      const ts = asString(parsed.ts) ?? new Date(0).toISOString();
-      const stream = asString(parsed.stream) ?? "stdout";
-      const chunk = typeof parsed.chunk === "string" ? parsed.chunk : "";
-      entries.push({ ts, stream, chunk });
-    } catch {
-      // Keep malformed lines out of the normalized bundle but preserve the raw log file separately.
+async function* iterateRunLogEntries(run: {
+  logStore: string | null;
+  logRef: string | null;
+}): AsyncGenerator<RunLogEntry> {
+  if (run.logStore !== "local_file" || !run.logRef) return;
+  const store = getRunLogStore();
+  let offset = 0;
+  let carry = "";
+
+  while (true) {
+    const result = await store
+      .read({ store: "local_file", logRef: run.logRef }, {
+        offset,
+        limitBytes: FEEDBACK_RUN_LOG_READ_CHUNK_BYTES,
+      })
+      .catch(() => null);
+    if (!result) return;
+
+    const combined = `${carry}${result.content}`;
+    const parts = combined.split(/\r?\n/);
+    const hasMore = result.nextOffset != null;
+    carry = hasMore ? (parts.pop() ?? "") : "";
+
+    for (const rawLine of parts) {
+      const entry = parseRunLogLine(rawLine);
+      if (entry) yield entry;
+    }
+
+    if (!hasMore) {
+      if (carry.trim()) {
+        const entry = parseRunLogLine(carry);
+        if (entry) yield entry;
+      }
+      return;
+    }
+
+    offset = result.nextOffset!;
+  }
+}
+
+async function collectRunLogForFeedback(run: {
+  logStore: string | null;
+  logRef: string | null;
+}): Promise<{ stdoutText: string; logText: string | null }> {
+  let stdoutText = "";
+  const logLineParts: string[] = [];
+  let logChars = 0;
+
+  for await (const entry of iterateRunLogEntries(run)) {
+    if (entry.stream === "stdout" && stdoutText.length < FEEDBACK_RUN_LOG_MAX_STDOUT_CHARS) {
+      const remaining = FEEDBACK_RUN_LOG_MAX_STDOUT_CHARS - stdoutText.length;
+      stdoutText += entry.chunk.slice(0, remaining);
+    }
+
+    if (logChars >= FEEDBACK_RUN_LOG_BUNDLE_MAX_CHARS) continue;
+    const line = `${JSON.stringify({ ts: entry.ts, stream: entry.stream, chunk: entry.chunk })}\n`;
+    const allowed = Math.min(line.length, FEEDBACK_RUN_LOG_BUNDLE_MAX_CHARS - logChars);
+    if (allowed > 0) {
+      logLineParts.push(line.slice(0, allowed));
+      logChars += allowed;
     }
   }
-  return entries;
+
+  const logText = logLineParts.length > 0 ? logLineParts.join("") : null;
+  return { stdoutText, logText };
 }
 
 function captureStatusFromFiles(files: FeedbackTraceBundleFile[]): FeedbackTraceBundleCaptureStatus {
@@ -1500,13 +1548,10 @@ async function buildFeedbackTraceBundleFromRow(
         .select()
         .from(heartbeatRunEvents)
         .where(eq(heartbeatRunEvents.runId, run.id))
-        .orderBy(asc(heartbeatRunEvents.seq));
-      const logText = await readFullRunLog(run);
-      const logEntries = parseRunLogEntries(logText);
-      const stdoutText = logEntries
-        .filter((entry) => entry.stream === "stdout")
-        .map((entry) => entry.chunk)
-        .join("");
+        .orderBy(desc(heartbeatRunEvents.seq))
+        .limit(FEEDBACK_RUN_EVENTS_MAX)
+        .then((rows) => rows.reverse());
+      const { stdoutText, logText } = await collectRunLogForFeedback(run);
 
       paperclipRun = sanitizeFeedbackValue(
         {

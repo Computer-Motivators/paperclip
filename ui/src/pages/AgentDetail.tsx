@@ -28,6 +28,7 @@ import { adapterLabels, roleLabels, help } from "../components/agent-config-prim
 import { ToggleSwitch } from "@/components/ui/toggle-switch";
 import { useAdapterCapabilities } from "@/adapters/use-adapter-capabilities";
 import { redactCommandText as redactCommandSecretText } from "@paperclipai/adapter-utils";
+import { appendWithMaxItems } from "@paperclipai/shared";
 import { MarkdownEditor } from "../components/MarkdownEditor";
 import { assetsApi } from "../api/assets";
 import { getUIAdapter, buildTranscript, onAdapterChange } from "../adapters";
@@ -153,6 +154,10 @@ const runStatusIcons: Record<string, { icon: typeof CheckCircle2; color: string 
 };
 
 const RUN_LOG_PAGE_BYTES = 256_000;
+/** Max run events retained in memory for the live log viewer (oldest dropped). */
+const MAX_RUN_EVENTS_RETAINED = 2_000;
+/** Max parsed log lines retained in memory for transcript rendering. */
+const MAX_LOG_LINES_RETAINED = 5_000;
 
 const REDACTED_ENV_VALUE = "***REDACTED***";
 const SECRET_ENV_KEY_RE =
@@ -3693,6 +3698,8 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
   const [isFollowing, setIsFollowing] = useState(false);
   const [isStreamingConnected, setIsStreamingConnected] = useState(false);
   const [transcriptMode, setTranscriptMode] = useState<TranscriptMode>("nice");
+  const [droppedLogLines, setDroppedLogLines] = useState(0);
+  const [droppedEvents, setDroppedEvents] = useState(0);
   const logEndRef = useRef<HTMLDivElement>(null);
   const pendingLogLineRef = useRef("");
   const scrollContainerRef = useRef<ScrollContainer | null>(null);
@@ -3740,7 +3747,13 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     }
 
     if (parsed.length > 0) {
-      setLogLines((prev) => [...prev, ...parsed]);
+      setLogLines((prev) => {
+        const bounded = appendWithMaxItems(prev, parsed, MAX_LOG_LINES_RETAINED);
+        if (bounded.dropped > 0) {
+          setDroppedLogLines((count) => count + bounded.dropped);
+        }
+        return bounded.items;
+      });
     }
   }
 
@@ -3752,7 +3765,11 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 
   useEffect(() => {
     if (initialEvents) {
-      setEvents(initialEvents);
+      const bounded = appendWithMaxItems([], initialEvents, MAX_RUN_EVENTS_RETAINED);
+      if (bounded.dropped > 0) {
+        setDroppedEvents(bounded.dropped);
+      }
+      setEvents(bounded.items);
       setLoading(false);
     }
   }, [initialEvents]);
@@ -3843,6 +3860,8 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
     let cancelled = false;
     pendingLogLineRef.current = "";
     setLogLines([]);
+    setDroppedLogLines(0);
+    setDroppedEvents(0);
     setLogOffset(0);
     setHasMoreLog(false);
     setLoadingMoreLog(false);
@@ -3908,7 +3927,13 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
       try {
         const newEvents = await heartbeatsApi.events(run.id, maxSeq, 100);
         if (newEvents.length > 0) {
-          setEvents((prev) => [...prev, ...newEvents]);
+          setEvents((prev) => {
+            const bounded = appendWithMaxItems(prev, newEvents, MAX_RUN_EVENTS_RETAINED);
+            if (bounded.dropped > 0) {
+              setDroppedEvents((count) => count + bounded.dropped);
+            }
+            return bounded.items;
+          });
         }
       } catch {
         // ignore polling errors
@@ -3985,7 +4010,13 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
           const streamRaw = asNonEmptyString(payload.stream);
           const stream = streamRaw === "stderr" || streamRaw === "system" ? streamRaw : "stdout";
           const ts = asNonEmptyString((payload as Record<string, unknown>).ts) ?? event.createdAt;
-          setLogLines((prev) => [...prev, { ts, stream, chunk }]);
+          setLogLines((prev) => {
+            const bounded = appendWithMaxItems(prev, [{ ts, stream, chunk }], MAX_LOG_LINES_RETAINED);
+            if (bounded.dropped > 0) {
+              setDroppedLogLines((count) => count + bounded.dropped);
+            }
+            return bounded.items;
+          });
           return;
         }
 
@@ -4022,7 +4053,11 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
 
         setEvents((prev) => {
           if (prev.some((existing) => existing.seq === seq)) return prev;
-          return [...prev, liveEvent];
+          const bounded = appendWithMaxItems(prev, [liveEvent], MAX_RUN_EVENTS_RETAINED);
+          if (bounded.dropped > 0) {
+            setDroppedEvents((count) => count + bounded.dropped);
+          }
+          return bounded.items;
         });
       };
 
@@ -4112,6 +4147,15 @@ function LogViewer({ run, adapterType }: { run: HeartbeatRun; adapterType: strin
         <RunInvocationCard payload={adapterInvokePayload} censorUsernameInLogs={censorUsernameInLogs} />
       )}
 
+      {(droppedLogLines > 0 || droppedEvents > 0) && (
+        <p className="text-xs text-amber-600 dark:text-amber-400">
+          Memory limit: dropped {droppedEvents > 0 ? `${droppedEvents} older events` : ""}
+          {droppedEvents > 0 && droppedLogLines > 0 ? " and " : ""}
+          {droppedLogLines > 0 ? `${droppedLogLines} older log lines` : ""}
+          {" "}
+          (showing most recent only).
+        </p>
+      )}
       <div className="flex items-center justify-between">
         <span className="text-xs font-medium text-muted-foreground">
           Transcript ({transcript.length})

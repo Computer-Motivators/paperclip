@@ -28,6 +28,9 @@ import detectPort from "detect-port";
 import { createApp } from "./app.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
+import { createIntervalGuard } from "./lib/interval-guard.js";
+import { startMemoryTelemetry } from "./lib/memory-telemetry.js";
+import { logLiveEventListenerPressureIfNeeded } from "./services/live-events.js";
 import { setupLiveEventsWebSocketServer } from "./realtime/live-events-ws.js";
 import {
   feedbackService,
@@ -92,6 +95,7 @@ export interface StartedServer {
 export async function startServer(): Promise<StartedServer> {
   let config = loadConfig();
   initTelemetry({ enabled: config.telemetryEnabled });
+  const stopMemoryTelemetry = startMemoryTelemetry();
   if (process.env.PAPERCLIP_SECRETS_PROVIDER === undefined) {
     process.env.PAPERCLIP_SECRETS_PROVIDER = config.secretsProvider;
   }
@@ -719,6 +723,9 @@ export async function startServer(): Promise<StartedServer> {
   if (config.heartbeatSchedulerEnabled) {
     const heartbeat = heartbeatService(db as any, { pluginWorkerManager });
     const routines = routineService(db as any, { pluginWorkerManager });
+    const heartbeatTickGuard = createIntervalGuard("heartbeat-tick");
+    const routineTickGuard = createIntervalGuard("routine-tick");
+    const heartbeatRecoveryGuard = createIntervalGuard("heartbeat-recovery");
   
     // Reap orphaned running runs at startup while in-memory execution state is empty,
     // then resume any persisted queued runs that were waiting on the previous process.
@@ -764,76 +771,70 @@ export async function startServer(): Promise<StartedServer> {
         logger.error({ err }, "startup heartbeat recovery failed");
       });
     setInterval(() => {
-      void heartbeat
-        .tickTimers(new Date())
-        .then((result) => {
-          if (result.enqueued > 0) {
-            logger.info({ ...result }, "heartbeat timer tick enqueued runs");
-          }
-        })
-        .catch((err) => {
-          logger.error({ err }, "heartbeat timer tick failed");
-        });
+      logLiveEventListenerPressureIfNeeded();
 
-      void routines
-        .tickScheduledTriggers(new Date())
-        .then((result) => {
-          if (result.triggered > 0) {
-            logger.info({ ...result }, "routine scheduler tick enqueued runs");
-          }
-        })
-        .catch((err) => {
-          logger.error({ err }, "routine scheduler tick failed");
-        });
-  
+      void heartbeatTickGuard.run(async () => {
+        const result = await heartbeat.tickTimers(new Date());
+        if (result.enqueued > 0) {
+          logger.info({ ...result }, "heartbeat timer tick enqueued runs");
+        }
+      }).catch((err) => {
+        logger.error({ err }, "heartbeat timer tick failed");
+      });
+
+      void routineTickGuard.run(async () => {
+        const result = await routines.tickScheduledTriggers(new Date());
+        if (result.triggered > 0) {
+          logger.info({ ...result }, "routine scheduler tick enqueued runs");
+        }
+      }).catch((err) => {
+        logger.error({ err }, "routine scheduler tick failed");
+      });
+
       // Periodically reap orphaned runs (5-min staleness threshold) and make sure
       // persisted queued work is still being driven forward.
-      void heartbeat
-        .reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 })
-        .then(() => heartbeat.promoteDueScheduledRetries())
-        .then(async (promotion) => {
-          await heartbeat.resumeQueuedRuns();
-          const reconciled = await heartbeat.reconcileStrandedAssignedIssues();
-          if (
-            promotion.promoted > 0 ||
-            reconciled.assignmentDispatched > 0 ||
-            reconciled.dispatchRequeued > 0 ||
-            reconciled.continuationRequeued > 0 ||
-            reconciled.successfulRunHandoffEscalated > 0 ||
-            reconciled.escalated > 0
-          ) {
-            logger.warn(
-              { promotedScheduledRetries: promotion.promoted, promotedScheduledRetryRunIds: promotion.runIds, ...reconciled },
-              "periodic heartbeat recovery changed assigned issue state",
-            );
-          }
-        })
-        .then(async () => {
-          const reconciled = await heartbeat.reconcileIssueGraphLiveness();
-          if (reconciled.escalationsCreated > 0) {
-            logger.warn({ ...reconciled }, "periodic issue-graph liveness reconciliation created escalations");
-          }
-        })
-        .then(async () => {
-          const scanned = await heartbeat.scanSilentActiveRuns();
-          if (scanned.created > 0 || scanned.escalated > 0) {
-            logger.warn({ ...scanned }, "periodic active-run output watchdog created review work");
-          }
-        })
-        .then(async () => {
-          const reviewed = await heartbeat.reconcileProductivityReviews();
-          if (reviewed.created > 0 || reviewed.updated > 0 || reviewed.failed > 0) {
-            logger.warn({ ...reviewed }, "periodic productivity reconciliation created or updated review work");
-          }
-        })
-        .catch((err) => {
-          logger.error({ err }, "periodic heartbeat recovery failed");
-        });
+      void heartbeatRecoveryGuard.run(async () => {
+        await heartbeat.reapOrphanedRuns({ staleThresholdMs: 5 * 60 * 1000 });
+        const promotion = await heartbeat.promoteDueScheduledRetries();
+        await heartbeat.resumeQueuedRuns();
+        const reconciled = await heartbeat.reconcileStrandedAssignedIssues();
+        if (
+          promotion.promoted > 0 ||
+          reconciled.assignmentDispatched > 0 ||
+          reconciled.dispatchRequeued > 0 ||
+          reconciled.continuationRequeued > 0 ||
+          reconciled.successfulRunHandoffEscalated > 0 ||
+          reconciled.escalated > 0
+        ) {
+          logger.warn(
+            { promotedScheduledRetries: promotion.promoted, promotedScheduledRetryRunIds: promotion.runIds, ...reconciled },
+            "periodic heartbeat recovery changed assigned issue state",
+          );
+        }
+
+        const graphReconciled = await heartbeat.reconcileIssueGraphLiveness();
+        if (graphReconciled.escalationsCreated > 0) {
+          logger.warn({ ...graphReconciled }, "periodic issue-graph liveness reconciliation created escalations");
+        }
+
+        const scanned = await heartbeat.scanSilentActiveRuns();
+        if (scanned.created > 0 || scanned.escalated > 0) {
+          logger.warn({ ...scanned }, "periodic active-run output watchdog created review work");
+        }
+
+        const reviewed = await heartbeat.reconcileProductivityReviews();
+        if (reviewed.created > 0 || reviewed.updated > 0 || reviewed.failed > 0) {
+          logger.warn({ ...reviewed }, "periodic productivity reconciliation created or updated review work");
+        }
+      }).catch((err) => {
+        logger.error({ err }, "periodic heartbeat recovery failed");
+      });
     }, config.heartbeatSchedulerIntervalMs);
   }
   
   if (config.databaseBackupEnabled) {
     const backupIntervalMs = config.databaseBackupIntervalMinutes * 60 * 1000;
+    const databaseBackupGuard = createIntervalGuard("database-backup");
 
     logger.info(
       {
@@ -844,7 +845,9 @@ export async function startServer(): Promise<StartedServer> {
       "Automatic database backups enabled",
     );
     setInterval(() => {
-      void runServerDatabaseBackup("scheduled").catch(() => {
+      void databaseBackupGuard.run(async () => {
+        await runServerDatabaseBackup("scheduled");
+      }).catch(() => {
         // runServerDatabaseBackup already logs the failure with context.
       });
     }, backupIntervalMs);
@@ -919,6 +922,7 @@ export async function startServer(): Promise<StartedServer> {
   
   {
     const shutdown = async (signal: "SIGINT" | "SIGTERM") => {
+      stopMemoryTelemetry();
       const telemetryClient = getTelemetryClient();
       if (telemetryClient) {
         telemetryClient.stop();

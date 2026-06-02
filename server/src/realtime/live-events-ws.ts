@@ -187,9 +187,30 @@ export function setupLiveEventsWebSocketServer(
   const cleanupByClient = new Map<WsSocket, () => void>();
   const aliveByClient = new Map<WsSocket, boolean>();
 
+  const LIVE_WS_CLIENT_WARN_THRESHOLD = 200;
+
   const pingInterval = setInterval(() => {
+    const clientCount = wss.clients.size;
+    const trackedCleanups = cleanupByClient.size;
+    if (clientCount >= LIVE_WS_CLIENT_WARN_THRESHOLD || trackedCleanups >= LIVE_WS_CLIENT_WARN_THRESHOLD) {
+      logger.warn(
+        { clientCount, trackedCleanups, aliveTracked: aliveByClient.size },
+        "High live websocket client count",
+      );
+    }
+
     for (const socket of wss.clients) {
       if (!aliveByClient.get(socket)) {
+        const cleanup = cleanupByClient.get(socket);
+        if (cleanup) {
+          try {
+            cleanup();
+          } catch {
+            // ignore cleanup errors
+          }
+        }
+        cleanupByClient.delete(socket);
+        aliveByClient.delete(socket);
         socket.terminate();
         continue;
       }
@@ -225,6 +246,16 @@ export function setupLiveEventsWebSocketServer(
     });
 
     socket.on("error", (err: Error) => {
+      const cleanup = cleanupByClient.get(socket);
+      if (cleanup) {
+        try {
+          cleanup();
+        } catch {
+          // ignore cleanup errors
+        }
+      }
+      cleanupByClient.delete(socket);
+      aliveByClient.delete(socket);
       logger.warn({ err, companyId: context.companyId }, "live websocket client error");
     });
   });

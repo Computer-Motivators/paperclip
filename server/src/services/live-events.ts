@@ -52,3 +52,25 @@ export function subscribeGlobalLiveEvents(listener: LiveEventListener) {
   emitter.on("*", listener);
   return () => emitter.off("*", listener);
 }
+
+const LIVE_EVENT_LISTENER_WARN_THRESHOLD = 500;
+
+export function getLiveEventListenerStats(): {
+  byChannel: Record<string, number>;
+  total: number;
+} {
+  const byChannel: Record<string, number> = {};
+  for (const channel of emitter.eventNames()) {
+    byChannel[String(channel)] = emitter.listenerCount(channel);
+  }
+  const total = Object.values(byChannel).reduce((sum, count) => sum + count, 0);
+  return { byChannel, total };
+}
+
+export function logLiveEventListenerPressureIfNeeded(): void {
+  const stats = getLiveEventListenerStats();
+  if (stats.total < LIVE_EVENT_LISTENER_WARN_THRESHOLD) return;
+  console.warn(
+    `[live-events] High listener count: total=${stats.total} channels=${JSON.stringify(stats.byChannel)}`,
+  );
+}

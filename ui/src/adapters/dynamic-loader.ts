@@ -28,6 +28,7 @@
  */
 
 import type { TranscriptEntry } from "@paperclipai/adapter-utils";
+import { BoundedLruCache } from "@paperclipai/shared";
 import type { StdoutLineParser, StdoutParserFactory } from "./types";
 import { createSandboxedWorker } from "./sandboxed-parser-worker";
 import type { SandboxRequest, SandboxResponse } from "./sandboxed-parser-worker";
@@ -59,6 +60,9 @@ const failedLoads = new Set<string>();
 
 /** In-flight init promises so concurrent callers share the same load. */
 const loadPromises = new Map<string, Promise<DynamicParserModule | null>>();
+
+/** Max cached parse results per adapter parser (memory-first). */
+const MAX_PARSE_CACHE_ENTRIES = 4_096;
 
 let resultNotifier: (() => void) | null = null;
 
@@ -184,7 +188,7 @@ function initSandboxedWorker(source: string): Promise<SandboxedParser> {
  * subsequent render shows the parsed entries.
  */
 function buildParserModule(sandbox: SandboxedParser): DynamicParserModule {
-  const parseCache = new Map<string, TranscriptEntry[]>();
+  const parseCache = new BoundedLruCache<string, TranscriptEntry[]>(MAX_PARSE_CACHE_ENTRIES);
   const pendingParseKeys = new Set<string>();
 
   const parseStdoutLine: StdoutLineParser = (line: string, ts: string) => {

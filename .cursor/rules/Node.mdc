@@ -1,0 +1,5 @@
+---
+alwaysApply: true
+---
+
+Use a local bundled node under a temporary directory inside of this project for building. Only node is installed.

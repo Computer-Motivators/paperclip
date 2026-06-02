@@ -26,4 +26,13 @@ if [ "$changed" = "1" ]; then
     chown -R node:node /paperclip
 fi
 
+# Memory-first defaults unless the operator set NODE_OPTIONS explicitly.
+if [ -z "${NODE_OPTIONS:-}" ]; then
+    if [ -n "${PAPERCLIP_NODE_MEMORY_OPTIONS:-}" ]; then
+        export NODE_OPTIONS="${PAPERCLIP_NODE_MEMORY_OPTIONS}"
+    else
+        export NODE_OPTIONS="--max-old-space-size=512"
+    fi
+fi
+
 exec gosu node "$@"
