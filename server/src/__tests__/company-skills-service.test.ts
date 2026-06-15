@@ -10,6 +10,47 @@ import {
 } from "./helpers/embedded-postgres.js";
 import { companySkillService } from "../services/company-skills.ts";
 
+// Minimal PKZip writer (stored entries) for exercising the .skill upload path.
+function buildTestZip(entries: Array<{ name: string; content: string }>): Buffer {
+  const locals: Buffer[] = [];
+  const centrals: Buffer[] = [];
+  let offset = 0;
+  for (const entry of entries) {
+    const nameBytes = Buffer.from(entry.name, "utf8");
+    const data = Buffer.from(entry.content, "utf8");
+    const local = Buffer.alloc(30 + nameBytes.length);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0, 8); // stored
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBytes.length, 26);
+    nameBytes.copy(local, 30);
+    locals.push(local, data);
+
+    const central = Buffer.alloc(46 + nameBytes.length);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBytes.length, 28);
+    central.writeUInt32LE(offset, 42);
+    nameBytes.copy(central, 46);
+    centrals.push(central);
+    offset += local.length + data.length;
+  }
+  const centralDir = Buffer.concat(centrals);
+  const localDir = Buffer.concat(locals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralDir.length, 12);
+  eocd.writeUInt32LE(localDir.length, 16);
+  return Buffer.concat([localDir, centralDir, eocd]);
+}
+
 const embeddedPostgresSupport = await getEmbeddedPostgresTestSupport();
 const describeEmbeddedPostgres = embeddedPostgresSupport.supported ? describe : describe.skip;
 
@@ -301,6 +342,100 @@ describeEmbeddedPostgres("companySkillService.list", () => {
       status: 422,
       message: "Public skill sharing is not available in this version.",
     });
+  });
+
+  it("creates, reads, and deletes bundled files on a managed local skill", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    const skill = await svc.createLocalSkill(companyId, { name: "Bundled Skill" });
+    expect(skill.fileInventory.map((entry) => entry.path)).toEqual(["SKILL.md"]);
+
+    const created = await svc.createFile(
+      companyId,
+      skill.id,
+      "scripts/run.py",
+      "print('hello')\n",
+    );
+    expect(created).toMatchObject({ path: "scripts/run.py", kind: "script", editable: true });
+
+    const afterCreate = await svc.getById(companyId, skill.id);
+    expect(afterCreate?.fileInventory.map((entry) => entry.path).sort()).toEqual([
+      "SKILL.md",
+      "scripts/run.py",
+    ]);
+    // A bundled script promotes the trust level.
+    expect(afterCreate?.trustLevel).toBe("scripts_executables");
+
+    const readBack = await svc.readFile(companyId, skill.id, "scripts/run.py");
+    expect(readBack?.content).toBe("print('hello')\n");
+
+    // Creating the same path twice conflicts.
+    await expect(svc.createFile(companyId, skill.id, "scripts/run.py", "x")).rejects.toMatchObject({
+      status: 409,
+    });
+    // SKILL.md cannot be deleted.
+    await expect(svc.deleteFile(companyId, skill.id, "SKILL.md")).rejects.toMatchObject({ status: 422 });
+
+    const deleted = await svc.deleteFile(companyId, skill.id, "scripts/run.py");
+    expect(deleted).toEqual({ skillId: skill.id, path: "scripts/run.py" });
+
+    const afterDelete = await svc.getById(companyId, skill.id);
+    expect(afterDelete?.fileInventory.map((entry) => entry.path)).toEqual(["SKILL.md"]);
+  });
+
+  it("imports a uploaded .skill zip archive as an editable managed skill", async () => {
+    const companyId = randomUUID();
+    await db.insert(companies).values({
+      id: companyId,
+      name: "Paperclip",
+      issuePrefix: `T${companyId.replace(/-/g, "").slice(0, 6).toUpperCase()}`,
+      requireBoardApprovalForNewAgents: false,
+    });
+
+    const archive = buildTestZip([
+      {
+        name: "weather/SKILL.md",
+        content: "---\nname: Weather\ndescription: Forecast helper\n---\n\n# Weather\n",
+      },
+      { name: "weather/scripts/fetch.py", content: "print('forecast')\n" },
+      { name: "weather/__MACOSX/ignored", content: "junk" },
+    ]);
+
+    const imported = await svc.importSkillArchive(companyId, {
+      filename: "weather.skill",
+      bytes: archive,
+    });
+
+    expect(imported).toMatchObject({
+      name: "Weather",
+      description: "Forecast helper",
+      slug: "weather",
+      sourceType: "local_path",
+      trustLevel: "scripts_executables",
+    });
+    expect(imported.fileInventory.map((entry) => entry.path).sort()).toEqual([
+      "SKILL.md",
+      "scripts/fetch.py",
+    ]);
+
+    const detail = await svc.detail(companyId, imported.id);
+    expect(detail?.editable).toBe(true);
+
+    const script = await svc.readFile(companyId, imported.id, "scripts/fetch.py");
+    expect(script?.content).toBe("print('forecast')\n");
+
+    // A second upload with the same name is uniquified rather than overwriting.
+    const second = await svc.importSkillArchive(companyId, {
+      filename: "weather.skill",
+      bytes: archive,
+    });
+    expect(second.slug).not.toBe(imported.slug);
   });
 
   it("creates a fork from the creation flow with copied files and lineage", async () => {

@@ -52,6 +52,7 @@ import { ghFetch, gitHubApiBase, resolveRawGitHubUrl } from "./github-fetch.js";
 import { agentService } from "./agents.js";
 import { projectService } from "./projects.js";
 import { normalizePortablePath } from "./portable-path.js";
+import { extractZipArchive, looksLikeGzipArchive, looksLikeZipArchive } from "./skill-archive.js";
 import {
   copyCatalogSkillFile,
   getCatalogPackageMetadata,
@@ -1032,6 +1033,64 @@ async function walkLocalFiles(root: string, current: string, out: string[]) {
 
 async function statPath(targetPath: string) {
   return fs.stat(targetPath).catch(() => null);
+}
+
+function isPathInsideDirectory(dir: string, candidate: string) {
+  const relative = path.relative(path.resolve(dir), path.resolve(candidate));
+  return relative !== "" && !relative.startsWith("..") && !path.isAbsolute(relative);
+}
+
+async function pruneEmptyDirectories(root: string, startDir: string) {
+  const resolvedRoot = path.resolve(root);
+  let current = path.resolve(startDir);
+  while (current !== resolvedRoot && isPathInsideDirectory(resolvedRoot, current)) {
+    const entries = await fs.readdir(current).catch(() => null);
+    if (!entries || entries.length > 0) break;
+    await fs.rmdir(current).catch(() => undefined);
+    current = path.dirname(current);
+  }
+}
+
+function shouldIgnoreArchivePath(portablePath: string) {
+  if (!portablePath) return true;
+  const segments = portablePath.split("/");
+  if (segments.includes("__MACOSX") || segments.includes(".git") || segments.includes("node_modules")) {
+    return true;
+  }
+  const base = segments[segments.length - 1] ?? "";
+  return base === ".DS_Store";
+}
+
+function parseSkillArchiveFiles(archive: { filename?: string | null; bytes: Buffer }): Map<string, Buffer> {
+  const { bytes } = archive;
+  if (looksLikeZipArchive(bytes)) {
+    const map = new Map<string, Buffer>();
+    for (const entry of extractZipArchive(bytes)) {
+      if (shouldIgnoreArchivePath(entry.path)) continue;
+      map.set(entry.path, entry.bytes);
+    }
+    return map;
+  }
+  if (looksLikeGzipArchive(bytes)) {
+    throw unprocessable("Gzip/tar skill archives are not supported. Upload a .skill (zip) file.");
+  }
+  // Treat a bare upload as a single SKILL.md document (drag-and-drop of a SKILL.md).
+  if (bytes.includes(0x00)) {
+    throw unprocessable("Unrecognized skill file. Upload a .skill (zip) archive containing a SKILL.md.");
+  }
+  return new Map([["SKILL.md", bytes]]);
+}
+
+// Returns the directory prefix that contains the shallowest SKILL.md, or null
+// when the archive has no SKILL.md. An empty string means SKILL.md is at the root.
+function locateSkillRootPrefix(fileMap: Map<string, Buffer>): string | null {
+  const skillPaths = Array.from(fileMap.keys()).filter(
+    (entry) => path.posix.basename(entry).toLowerCase() === "skill.md",
+  );
+  if (skillPaths.length === 0) return null;
+  skillPaths.sort((left, right) => left.split("/").length - right.split("/").length || left.localeCompare(right));
+  const dir = path.posix.dirname(skillPaths[0]!);
+  return dir === "." ? "" : dir;
 }
 
 async function collectLocalSkillInventory(
@@ -3324,6 +3383,191 @@ export function companySkillService(db: Db) {
     return detail;
   }
 
+  function assertEditableManagedSkill(skill: CompanySkill) {
+    const source = deriveSkillSourceInfo(skill);
+    if (!source.editable || skill.sourceType !== "local_path") {
+      throw unprocessable(source.editableReason ?? "This skill cannot be edited.");
+    }
+    const skillDir = normalizeSkillDirectory(skill);
+    if (!skillDir) {
+      throw unprocessable("This skill does not have an editable local directory.");
+    }
+    return skillDir;
+  }
+
+  // Re-read the managed skill directory from disk and persist the resulting
+  // inventory + trust level so that newly created or deleted bundled files are
+  // reflected everywhere the inventory is consumed.
+  async function syncManagedSkillInventory(companyId: string, skill: CompanySkill, skillDir: string) {
+    const inventory = await collectLocalSkillInventory(skillDir);
+    await db
+      .update(companySkills)
+      .set({
+        fileInventory: serializeFileInventory(inventory),
+        trustLevel: deriveTrustLevel(inventory),
+        updatedAt: new Date(),
+      })
+      .where(and(eq(companySkills.id, skill.id), eq(companySkills.companyId, companyId)));
+    return inventory;
+  }
+
+  async function createFile(
+    companyId: string,
+    skillId: string,
+    relativePath: string,
+    content: string,
+    actor: SkillActor | null = null,
+  ): Promise<CompanySkillFileDetail> {
+    await ensureSkillInventoryCurrent(companyId);
+    const skill = await getById(companyId, skillId);
+    if (!skill) throw notFound("Skill not found");
+    const skillDir = assertEditableManagedSkill(skill);
+
+    const normalizedPath = normalizePortablePath(relativePath);
+    if (!normalizedPath) {
+      throw unprocessable("A file path is required.");
+    }
+    if (normalizedPath === "SKILL.md") {
+      throw conflict("SKILL.md already exists for this skill; edit it instead of creating it.");
+    }
+    if (skill.fileInventory.some((entry) => entry.path === normalizedPath)) {
+      throw conflict(`A file already exists at "${normalizedPath}".`);
+    }
+
+    const absolutePath = path.resolve(skillDir, normalizedPath);
+    if (!isPathInsideDirectory(skillDir, absolutePath)) {
+      throw unprocessable("File path escapes the skill directory.");
+    }
+    if (await statPath(absolutePath)) {
+      throw conflict(`A file already exists at "${normalizedPath}".`);
+    }
+
+    await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+    await fs.writeFile(absolutePath, content, "utf8");
+
+    await syncManagedSkillInventory(companyId, skill, skillDir);
+    await createVersion(companyId, skillId, {}, actor);
+
+    const detail = await readFile(companyId, skillId, normalizedPath);
+    if (!detail) throw notFound("Skill file not found");
+    return detail;
+  }
+
+  async function deleteFile(
+    companyId: string,
+    skillId: string,
+    relativePath: string,
+    actor: SkillActor | null = null,
+  ): Promise<{ skillId: string; path: string }> {
+    await ensureSkillInventoryCurrent(companyId);
+    const skill = await getById(companyId, skillId);
+    if (!skill) throw notFound("Skill not found");
+    const skillDir = assertEditableManagedSkill(skill);
+
+    const normalizedPath = normalizePortablePath(relativePath);
+    if (!normalizedPath) {
+      throw unprocessable("A file path is required.");
+    }
+    if (normalizedPath === "SKILL.md") {
+      throw unprocessable("SKILL.md cannot be deleted; it defines the skill.");
+    }
+    if (!skill.fileInventory.some((entry) => entry.path === normalizedPath)) {
+      throw notFound("Skill file not found");
+    }
+
+    const absolutePath = path.resolve(skillDir, normalizedPath);
+    if (!isPathInsideDirectory(skillDir, absolutePath)) {
+      throw unprocessable("File path escapes the skill directory.");
+    }
+
+    await fs.rm(absolutePath, { force: true });
+    await pruneEmptyDirectories(skillDir, path.dirname(absolutePath));
+
+    await syncManagedSkillInventory(companyId, skill, skillDir);
+    await createVersion(companyId, skillId, {}, actor);
+
+    return { skillId: skill.id, path: normalizedPath };
+  }
+
+  async function importSkillArchive(
+    companyId: string,
+    archive: { filename?: string | null; bytes: Buffer },
+    actor: SkillActor | null = null,
+  ): Promise<CompanySkill> {
+    await ensureSkillInventoryCurrent(companyId);
+
+    const fileMap = parseSkillArchiveFiles(archive);
+    const skillRootPrefix = locateSkillRootPrefix(fileMap);
+    if (skillRootPrefix === null) {
+      throw unprocessable("No SKILL.md file was found in the uploaded .skill archive.");
+    }
+
+    // Strip the archive's skill-root prefix so SKILL.md lives at the directory root.
+    const relativeFiles = new Map<string, Buffer>();
+    for (const [archivePath, bytes] of fileMap) {
+      if (skillRootPrefix && !archivePath.startsWith(`${skillRootPrefix}/`)) continue;
+      const relative = skillRootPrefix
+        ? normalizePortablePath(archivePath.slice(skillRootPrefix.length + 1))
+        : archivePath;
+      if (!relative) continue;
+      relativeFiles.set(relative, bytes);
+    }
+
+    const skillMarkdownBytes = relativeFiles.get("SKILL.md");
+    if (!skillMarkdownBytes) {
+      throw unprocessable("No SKILL.md file was found in the uploaded .skill archive.");
+    }
+    const markdown = skillMarkdownBytes.toString("utf8");
+    const parsed = parseFrontmatterMarkdown(markdown);
+
+    const fallbackSlug = archive.filename
+      ? path.basename(archive.filename).replace(/\.(skill|zip)$/i, "")
+      : skillRootPrefix
+        ? path.posix.basename(skillRootPrefix)
+        : "skill";
+    const baseSlug = deriveImportedSkillSlug(parsed.frontmatter, fallbackSlug);
+
+    const existingSkills = await listFull(companyId);
+    const usedSlugs = new Set(existingSkills.map((entry) => normalizeSkillSlug(entry.slug) ?? entry.slug));
+    const slug = uniqueSkillSlug(normalizeSkillSlug(baseSlug) ?? "skill", usedSlugs);
+    const key = `company/${companyId}/${slug}`;
+
+    const managedRoot = resolveManagedSkillsRoot(companyId);
+    const skillDir = path.resolve(managedRoot, slug);
+    await fs.rm(skillDir, { recursive: true, force: true });
+    await fs.mkdir(skillDir, { recursive: true });
+
+    for (const [relative, bytes] of relativeFiles) {
+      const absolutePath = path.resolve(skillDir, relative);
+      if (!isPathInsideDirectory(skillDir, absolutePath)) continue;
+      await fs.mkdir(path.dirname(absolutePath), { recursive: true });
+      await fs.writeFile(absolutePath, bytes);
+    }
+
+    const inventory = await collectLocalSkillInventory(skillDir);
+    const imported = await upsertImportedSkills(companyId, [{
+      key,
+      slug,
+      name: asString(parsed.frontmatter.name) ?? slug,
+      description: asString(parsed.frontmatter.description),
+      markdown,
+      sourceType: "local_path",
+      sourceLocator: skillDir,
+      sourceRef: null,
+      trustLevel: deriveTrustLevel(inventory),
+      compatibility: "compatible",
+      fileInventory: inventory,
+      metadata: {
+        sourceKind: "managed_local",
+        importedFromArchive: archive.filename ?? null,
+      },
+    }]);
+
+    const created = imported[0]!;
+    await createVersion(companyId, created.id, { label: "Uploaded .skill file" }, actor);
+    return (await getById(companyId, created.id)) ?? created;
+  }
+
   async function installUpdate(companyId: string, skillId: string, options: { force?: boolean } = {}): Promise<CompanySkill | null> {
     await ensureSkillInventoryCurrent(companyId);
     const skill = await getById(companyId, skillId);
@@ -4573,7 +4817,10 @@ export function companySkillService(db: Db) {
     readFile,
     updateSkill,
     updateFile,
+    createFile,
+    deleteFile,
     createLocalSkill,
+    importSkillArchive,
     deleteSkill,
     importFromSource,
     installFromCatalog,

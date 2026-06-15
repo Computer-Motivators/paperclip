@@ -277,6 +277,16 @@ export const companySkillFileUpdateSchema = z.object({
   content: z.string(),
 });
 
+export const companySkillFileCreateSchema = z.object({
+  path: z.string().min(1),
+  content: z.string().default(""),
+});
+
+export const companySkillFileDeleteResultSchema = z.object({
+  skillId: z.string().uuid(),
+  path: z.string().min(1),
+});
+
 export const catalogSkillKindSchema = z.enum(["bundled", "optional"]);
 
 export const catalogSkillFileSchema = z.object({
@@ -355,6 +365,7 @@ export type CompanySkillListQuery = z.infer<typeof companySkillListQuerySchema>;
 export type CompanySkillProjectScan = z.infer<typeof companySkillProjectScanRequestSchema>;
 export type CompanySkillCreate = z.infer<typeof companySkillCreateSchema>;
 export type CompanySkillFileUpdate = z.infer<typeof companySkillFileUpdateSchema>;
+export type CompanySkillFileCreate = z.infer<typeof companySkillFileCreateSchema>;
 export type CompanySkillVersionCreate = z.infer<typeof companySkillVersionCreateSchema>;
 export type CompanySkillCommentCreate = z.infer<typeof companySkillCommentCreateSchema>;
 export type CompanySkillCommentUpdate = z.infer<typeof companySkillCommentUpdateSchema>;
