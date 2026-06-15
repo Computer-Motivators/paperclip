@@ -15,7 +15,8 @@ describe("parseDirectOpenRouterStdoutLine", () => {
       JSON.stringify({ type: "usage", input_tokens: 2, output_tokens: 3, cached_input_tokens: 1, cost_usd: 0.004 }),
       "2026-01-01T00:00:00.000Z",
     );
-    expect(out[0]?.kind).toBe("system");
-    expect(out[0]?.text).toContain("cached=1");
+    const first = out[0];
+    expect(first?.kind).toBe("system");
+    expect(first && "text" in first ? first.text : undefined).toContain("cached=1");
   });
 });
