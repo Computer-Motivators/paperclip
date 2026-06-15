@@ -109,6 +109,8 @@ import {
   ShieldCheck,
   Star,
   Trash2,
+  Upload,
+  FilePlus,
   Users,
   History,
   XOctagon,
@@ -915,6 +917,106 @@ function CategoryNav({
   );
 }
 
+export function UploadSkillDialog({
+  open,
+  onOpenChange,
+  pending,
+  onUpload,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  pending: boolean;
+  onUpload: (file: File) => void;
+}) {
+  const [file, setFile] = useState<File | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!open) {
+      setFile(null);
+      setDragging(false);
+    }
+  }, [open]);
+
+  function acceptFiles(files: FileList | null) {
+    const next = files?.[0];
+    if (next) setFile(next);
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Upload a .skill file</DialogTitle>
+          <DialogDescription>
+            Drop a Claude <code>.skill</code> archive (or a <code>.zip</code> containing a{" "}
+            <code>SKILL.md</code>) to add it to this company. Bundled scripts and assets are
+            imported and remain editable.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3">
+          <button
+            type="button"
+            onClick={() => inputRef.current?.click()}
+            onDragOver={(event) => {
+              event.preventDefault();
+              setDragging(true);
+            }}
+            onDragLeave={(event) => {
+              event.preventDefault();
+              setDragging(false);
+            }}
+            onDrop={(event) => {
+              event.preventDefault();
+              setDragging(false);
+              acceptFiles(event.dataTransfer.files);
+            }}
+            className={cn(
+              "flex w-full flex-col items-center justify-center gap-2 rounded-lg border border-dashed px-4 py-10 text-center transition-colors",
+              dragging ? "border-primary bg-accent/40" : "border-border hover:bg-accent/20",
+            )}
+          >
+            <Upload className="h-6 w-6 text-muted-foreground" />
+            {file ? (
+              <span className="flex items-center gap-2 font-mono text-sm">
+                <FileText className="h-4 w-4" />
+                {file.name}
+              </span>
+            ) : (
+              <>
+                <span className="text-sm font-medium">Drag and drop your .skill file here</span>
+                <span className="text-xs text-muted-foreground">or click to browse</span>
+              </>
+            )}
+            <input
+              ref={inputRef}
+              type="file"
+              accept=".skill,.zip,application/zip,application/octet-stream"
+              className="hidden"
+              onChange={(event) => acceptFiles(event.target.files)}
+            />
+          </button>
+          <div className="flex items-center justify-end gap-2">
+            {file ? (
+              <Button variant="ghost" size="sm" onClick={() => setFile(null)} disabled={pending}>
+                Clear
+              </Button>
+            ) : null}
+            <Button
+              size="sm"
+              onClick={() => file && onUpload(file)}
+              disabled={!file || pending}
+            >
+              {pending ? <RefreshCw className="h-4 w-4 animate-spin" /> : "Upload skill"}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 export function DiscoveryGrid({
   tab,
   tabCounts,
@@ -934,6 +1036,7 @@ export function DiscoveryGrid({
   totalCount,
   onCreate,
   onImport,
+  onUpload,
   onBrowseCatalog,
   onScan,
   scanPending,
@@ -957,6 +1060,7 @@ export function DiscoveryGrid({
   totalCount: number;
   onCreate: () => void;
   onImport: () => void;
+  onUpload: () => void;
   onBrowseCatalog: () => void;
   onScan: () => void;
   scanPending: boolean;
@@ -1088,6 +1192,10 @@ export function DiscoveryGrid({
               <DropdownMenuItem onSelect={onImport}>
                 <Globe className="mr-2 h-4 w-4" />
                 Import from path or URL
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={onUpload}>
+                <Upload className="mr-2 h-4 w-4" />
+                Upload .skill file
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -2561,6 +2669,10 @@ export function SkillDetailPage({
   setDraft,
   onSave,
   savePending,
+  onCreateFile,
+  createFilePending,
+  onDeleteFile,
+  deleteFilePending,
   versions,
   versionsLoading,
   attachAgents,
@@ -2600,6 +2712,10 @@ export function SkillDetailPage({
   setDraft: (value: string) => void;
   onSave: () => void;
   savePending: boolean;
+  onCreateFile: (path: string) => void;
+  createFilePending: boolean;
+  onDeleteFile: (path: string) => void;
+  deleteFilePending: boolean;
   versions: CompanySkillVersion[];
   versionsLoading: boolean;
   attachAgents: AttachAgentOption[];
@@ -2624,6 +2740,8 @@ export function SkillDetailPage({
 }) {
   const [diffOpen, setDiffOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [newFileOpen, setNewFileOpen] = useState(false);
+  const [newFilePath, setNewFilePath] = useState("");
   // Top-level description is clamped to four lines; "View all" expands it. We
   // only surface the toggle when the text actually overflows the clamp.
   const descriptionRef = useRef<HTMLParagraphElement | null>(null);
@@ -2712,7 +2830,48 @@ export function SkillDetailPage({
     return (
       <div className="grid min-h-[560px] gap-0 lg:grid-cols-[13rem_minmax(0,1fr)]">
         <aside className="border-b border-border pb-3 lg:border-b-0 lg:border-r lg:pb-0 lg:pr-3">
-          <div className="mb-2 text-xs font-medium uppercase tracking-wide text-muted-foreground">Files</div>
+          <div className="mb-2 flex items-center justify-between gap-2">
+            <span className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Files</span>
+            {skill.editable ? (
+              <button
+                type="button"
+                className="flex items-center gap-1 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => {
+                  setNewFileOpen((value) => !value);
+                  setNewFilePath("");
+                }}
+                title="Add a file to this skill"
+              >
+                <FilePlus className="h-3.5 w-3.5" />
+                New file
+              </button>
+            ) : null}
+          </div>
+          {skill.editable && newFileOpen ? (
+            <form
+              className="mb-2 flex items-center gap-1.5"
+              onSubmit={(event) => {
+                event.preventDefault();
+                const trimmed = newFilePath.trim();
+                if (!trimmed) return;
+                onCreateFile(trimmed);
+                setNewFileOpen(false);
+                setNewFilePath("");
+              }}
+            >
+              <Input
+                autoFocus
+                value={newFilePath}
+                onChange={(event) => setNewFilePath(event.target.value)}
+                placeholder="scripts/run.py"
+                className="h-8 font-mono text-xs"
+                disabled={createFilePending}
+              />
+              <Button type="submit" size="sm" disabled={createFilePending || !newFilePath.trim()}>
+                {createFilePending ? <RefreshCw className="h-3.5 w-3.5 animate-spin" /> : "Add"}
+              </Button>
+            </form>
+          ) : null}
           <SkillTree
             nodes={buildTree(skill.fileInventory)}
             skillId={skill.id}
@@ -2757,6 +2916,22 @@ export function SkillDetailPage({
                     <Pencil className="mr-1.5 h-3.5 w-3.5" /> Edit
                   </Button>
                 )
+              ) : null}
+              {skill.editable && file?.editable && !editMode && file.path !== "SKILL.md" ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-destructive hover:text-destructive"
+                  onClick={() => {
+                    if (window.confirm(`Delete ${file.path}? This cannot be undone.`)) {
+                      onDeleteFile(file.path);
+                    }
+                  }}
+                  disabled={deleteFilePending}
+                >
+                  <Trash2 className="mr-1.5 h-3.5 w-3.5" />
+                  Delete
+                </Button>
               ) : null}
             </div>
           </div>
@@ -3658,6 +3833,7 @@ export function CompanySkills() {
   const [createDraft, setCreateDraft] = useState<SkillCreateDraft>(() => buildBlankSkillDraft());
   const [createError, setCreateError] = useState<string | null>(null);
   const [importDialogOpen, setImportDialogOpen] = useState(false);
+  const [uploadDialogOpen, setUploadDialogOpen] = useState(false);
   const parsedRoute = useMemo(() => parseSkillRoute(routePath), [routePath]);
   const routeSkillToken = parsedRoute.skillToken;
   const selectedPath = parsedRoute.filePath;
@@ -3909,6 +4085,27 @@ export function CompanySkills() {
     },
   });
 
+  const uploadSkill = useMutation({
+    mutationFn: (file: File) => companySkillsApi.uploadArchive(selectedCompanyId!, file),
+    onSuccess: async (skill) => {
+      await queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.list(selectedCompanyId!) });
+      setUploadDialogOpen(false);
+      navigate(routeForSkill(skill));
+      pushToast({
+        tone: "success",
+        title: "Skill uploaded",
+        body: `${skill.name} is now editable in the Paperclip workspace.`,
+      });
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Skill upload failed",
+        body: error instanceof Error ? error.message : "Failed to upload .skill file.",
+      });
+    },
+  });
+
   const createSkill = useMutation({
     mutationFn: (payload: CompanySkillCreateRequest) => companySkillsApi.create(selectedCompanyId!, payload),
     onSuccess: async (skill) => {
@@ -3999,6 +4196,48 @@ export function CompanySkills() {
         tone: "error",
         title: "Save failed",
         body: error instanceof Error ? error.message : "Failed to save skill file.",
+      });
+    },
+  });
+
+  const createFile = useMutation({
+    mutationFn: (path: string) => companySkillsApi.createFile(selectedCompanyId!, selectedSkillId!, path),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.detail(selectedCompanyId!, selectedSkillId!) }),
+      ]);
+      navigate(routeForSkillId(selectedSkillId!, result.path));
+      pushToast({ tone: "success", title: "File created", body: result.path });
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Create file failed",
+        body: error instanceof Error ? error.message : "Failed to create skill file.",
+      });
+    },
+  });
+
+  const deleteFile = useMutation({
+    mutationFn: (path: string) => companySkillsApi.deleteFile(selectedCompanyId!, selectedSkillId!, path),
+    onSuccess: async (result) => {
+      await Promise.all([
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.list(selectedCompanyId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.detail(selectedCompanyId!, selectedSkillId!) }),
+        queryClient.invalidateQueries({ queryKey: queryKeys.companySkills.file(selectedCompanyId!, selectedSkillId!, result.path) }),
+      ]);
+      // Drop the now-deleted file from the route so the editor falls back to SKILL.md.
+      if (selectedPath === result.path) {
+        navigate(routeForSkillId(selectedSkillId!, "SKILL.md"));
+      }
+      pushToast({ tone: "success", title: "File deleted", body: result.path });
+    },
+    onError: (error) => {
+      pushToast({
+        tone: "error",
+        title: "Delete file failed",
+        body: error instanceof Error ? error.message : "Failed to delete skill file.",
       });
     },
   });
@@ -4553,6 +4792,13 @@ export function CompanySkills() {
         </DialogContent>
       </Dialog>
 
+      <UploadSkillDialog
+        open={uploadDialogOpen}
+        onOpenChange={setUploadDialogOpen}
+        pending={uploadSkill.isPending}
+        onUpload={(file) => uploadSkill.mutate(file)}
+      />
+
       {isDiscovery ? (
         <DiscoveryGrid
           tab={discoveryTab}
@@ -4573,6 +4819,7 @@ export function CompanySkills() {
           totalCount={discoveryCards.length}
           onCreate={() => openCreateWizard()}
           onImport={() => setImportDialogOpen(true)}
+          onUpload={() => setUploadDialogOpen(true)}
           onBrowseCatalog={() => setDiscoveryTab("catalog")}
           onScan={() => scanProjects.mutate()}
           scanPending={scanProjects.isPending}
@@ -4597,6 +4844,10 @@ export function CompanySkills() {
           setDraft={setDraft}
           onSave={() => saveFile.mutate()}
           savePending={saveFile.isPending}
+          onCreateFile={(path) => createFile.mutate(path)}
+          createFilePending={createFile.isPending}
+          onDeleteFile={(path) => deleteFile.mutate(path)}
+          deleteFilePending={deleteFile.isPending}
           versions={versionsQuery.data ?? []}
           versionsLoading={versionsQuery.isLoading}
           attachAgents={eligibleAgentsForAttach}

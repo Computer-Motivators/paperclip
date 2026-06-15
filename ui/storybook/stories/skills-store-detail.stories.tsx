@@ -151,6 +151,10 @@ function SkillDetailHarness({ initialTab = "overview" as DetailTab }: { initialT
       setDraft={setDraft}
       onSave={() => {}}
       savePending={false}
+      onCreateFile={() => {}}
+      createFilePending={false}
+      onDeleteFile={() => {}}
+      deleteFilePending={false}
       versions={MOCK_VERSIONS}
       versionsLoading={false}
       attachAgents={MOCK_ATTACH_AGENTS}

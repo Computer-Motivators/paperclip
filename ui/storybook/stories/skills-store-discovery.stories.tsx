@@ -298,6 +298,7 @@ function DiscoveryGridHarness({
       totalCount={cards.length}
       onCreate={() => {}}
       onImport={() => {}}
+      onUpload={() => {}}
       onBrowseCatalog={() => setTab("catalog")}
       onScan={() => {}}
       scanPending={false}

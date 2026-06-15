@@ -323,6 +323,16 @@ export interface CompanySkillFileUpdateRequest {
   content: string;
 }
 
+export interface CompanySkillFileCreateRequest {
+  path: string;
+  content?: string;
+}
+
+export interface CompanySkillFileDeleteResult {
+  skillId: string;
+  path: string;
+}
+
 export type CatalogSkillKind = "bundled" | "optional";
 
 export type CatalogSkillFileKind = CompanySkillFileInventoryEntry["kind"];

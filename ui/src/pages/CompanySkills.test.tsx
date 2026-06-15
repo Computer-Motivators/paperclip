@@ -191,6 +191,10 @@ async function renderSkillDetail(versions: CompanySkillVersion[]) {
         setDraft={vi.fn()}
         onSave={vi.fn()}
         savePending={false}
+        onCreateFile={vi.fn()}
+        createFilePending={false}
+        onDeleteFile={vi.fn()}
+        deleteFilePending={false}
         versions={versions}
         versionsLoading={false}
         attachAgents={[]}

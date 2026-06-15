@@ -95,6 +95,8 @@ export type {
   CompanySkillCreateRequest,
   CompanySkillFileDetail,
   CompanySkillFileUpdateRequest,
+  CompanySkillFileCreateRequest,
+  CompanySkillFileDeleteResult,
   CatalogSkillKind,
   CatalogSkillFileKind,
   CatalogSkillFile,

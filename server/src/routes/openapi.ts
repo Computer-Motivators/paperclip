@@ -75,6 +75,7 @@ import {
   // Company skills
   companySkillCreateSchema,
   companySkillFileUpdateSchema,
+  companySkillFileCreateSchema,
   companySkillImportSchema,
   companySkillProjectScanRequestSchema,
   // Issue tree
@@ -3164,6 +3165,39 @@ registry.registerPath({
     body: jsonBody(companySkillFileUpdateSchema),
   },
   responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/companies/{companyId}/skills/{skillId}/files",
+  tags: ["skills"],
+  summary: "Create a skill file",
+  request: {
+    params: z.object({ companyId: z.string(), skillId: z.string() }),
+    body: jsonBody(companySkillFileCreateSchema),
+  },
+  responses: { 201: r.ok(), 400: r.badRequest, 401: r.unauthorized },
+});
+
+registry.registerPath({
+  method: "delete",
+  path: "/api/companies/{companyId}/skills/{skillId}/files",
+  tags: ["skills"],
+  summary: "Delete a skill file",
+  request: {
+    params: z.object({ companyId: z.string(), skillId: z.string() }),
+    query: z.object({ path: z.string() }),
+  },
+  responses: { 200: r.ok(), 400: r.badRequest, 401: r.unauthorized },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/companies/{companyId}/skills/upload",
+  tags: ["skills"],
+  summary: "Upload a .skill archive",
+  request: { params: z.object({ companyId: z.string() }) },
+  responses: { 201: r.ok(), 400: r.badRequest, 401: r.unauthorized },
 });
 
 registry.registerPath({

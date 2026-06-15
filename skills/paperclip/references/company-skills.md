@@ -40,7 +40,11 @@ Company library:
 - `GET /api/companies/:companyId/skills`
 - `GET /api/companies/:companyId/skills/:skillId`
 - `GET /api/companies/:companyId/skills/:skillId/files?path=SKILL.md`
+- `POST /api/companies/:companyId/skills/:skillId/files` (create a bundled file: `{ "path": "scripts/run.py", "content": "..." }`)
+- `PATCH /api/companies/:companyId/skills/:skillId/files` (update a bundled file: `{ "path": "...", "content": "..." }`)
+- `DELETE /api/companies/:companyId/skills/:skillId/files?path=scripts/run.py` (delete a bundled file; `SKILL.md` cannot be deleted)
 - `POST /api/companies/:companyId/skills` (managed local create)
+- `POST /api/companies/:companyId/skills/upload` (multipart `file` field — drop-in for a Claude `.skill` zip archive, including bundled scripts/assets)
 - `POST /api/companies/:companyId/skills/import`
 - `POST /api/companies/:companyId/skills/scan-projects`
 - `GET /api/companies/:companyId/skills/:skillId/update-status`

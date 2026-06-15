@@ -10,6 +10,7 @@ import type {
   CompanySkillCreateRequest,
   CompanySkillDetail,
   CompanySkillFileDetail,
+  CompanySkillFileDeleteResult,
   CompanySkillForkRequest,
   CompanySkillImportResult,
   CompanySkillInstallCatalogRequest,
@@ -106,6 +107,23 @@ export const companySkillsApi = {
       `/companies/${encodeURIComponent(companyId)}/skills/${encodeURIComponent(skillId)}/files`,
       { path, content },
     ),
+  createFile: (companyId: string, skillId: string, path: string, content = "") =>
+    api.post<CompanySkillFileDetail>(
+      `/companies/${encodeURIComponent(companyId)}/skills/${encodeURIComponent(skillId)}/files`,
+      { path, content },
+    ),
+  deleteFile: (companyId: string, skillId: string, path: string) =>
+    api.delete<CompanySkillFileDeleteResult>(
+      `/companies/${encodeURIComponent(companyId)}/skills/${encodeURIComponent(skillId)}/files?path=${encodeURIComponent(path)}`,
+    ),
+  uploadArchive: (companyId: string, file: File) => {
+    const body = new FormData();
+    body.append("file", file);
+    return api.postForm<CompanySkill>(
+      `/companies/${encodeURIComponent(companyId)}/skills/upload`,
+      body,
+    );
+  },
   create: (companyId: string, payload: CompanySkillCreateRequest) =>
     api.post<CompanySkill>(
       `/companies/${encodeURIComponent(companyId)}/skills`,

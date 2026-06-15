@@ -1,10 +1,12 @@
-import { Router, type Request } from "express";
+import { Router, type Request, type Response } from "express";
+import multer from "multer";
 import type { Db } from "@paperclipai/db";
 import {
   catalogSkillListQuerySchema,
   companySkillCommentCreateSchema,
   companySkillCommentUpdateSchema,
   companySkillCreateSchema,
+  companySkillFileCreateSchema,
   companySkillFileUpdateSchema,
   companySkillForkSchema,
   companySkillImportSchema,
@@ -20,7 +22,7 @@ import { trackSkillImported } from "@paperclipai/shared/telemetry";
 import { validate } from "../middleware/validate.js";
 import { accessService, agentService, companySkillService, logActivity } from "../services/index.js";
 import { getCatalogSkillOrThrow, listCatalogSkills, readCatalogSkillFile } from "../services/skills-catalog.js";
-import { forbidden } from "../errors.js";
+import { badRequest, forbidden } from "../errors.js";
 import { assertAuthenticated, assertCompanyAccess, getActorInfo } from "./authz.js";
 import { getTelemetryClient } from "../telemetry.js";
 
@@ -37,6 +39,30 @@ export function companySkillRoutes(db: Db) {
   const agents = agentService(db);
   const access = accessService(db);
   const svc = companySkillService(db);
+
+  const SKILL_ARCHIVE_MAX_BYTES = 25 * 1024 * 1024;
+  const skillArchiveUpload = multer({
+    storage: multer.memoryStorage(),
+    limits: { fileSize: SKILL_ARCHIVE_MAX_BYTES, files: 1 },
+  });
+
+  async function runSkillArchiveUpload(req: Request, res: Response) {
+    await new Promise<void>((resolve, reject) => {
+      skillArchiveUpload.single("file")(req, res, (err: unknown) => {
+        if (err instanceof multer.MulterError) {
+          reject(
+            err.code === "LIMIT_FILE_SIZE"
+              ? badRequest("Skill file is too large (max 25 MB).")
+              : badRequest(err.message),
+          );
+        } else if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      });
+    });
+  }
 
   function canCreateAgents(agent: { permissions: Record<string, unknown> | null | undefined }) {
     if (!agent.permissions || typeof agent.permissions !== "object") return false;
@@ -480,6 +506,99 @@ export function companySkillRoutes(db: Db) {
       res.json(result);
     },
   );
+
+  router.post(
+    "/companies/:companyId/skills/:skillId/files",
+    validate(companySkillFileCreateSchema),
+    async (req, res) => {
+      const companyId = req.params.companyId as string;
+      const skillId = req.params.skillId as string;
+      await assertCanMutateCompanySkills(req, companyId);
+      const result = await svc.createFile(
+        companyId,
+        skillId,
+        String(req.body.path ?? ""),
+        String(req.body.content ?? ""),
+        skillActor(req),
+      );
+
+      const actor = getActorInfo(req);
+      await logActivity(db, {
+        companyId,
+        actorType: actor.actorType,
+        actorId: actor.actorId,
+        agentId: actor.agentId,
+        runId: actor.runId,
+        action: "company.skill_file_created",
+        entityType: "company_skill",
+        entityId: skillId,
+        details: {
+          path: result.path,
+          kind: result.kind,
+        },
+      });
+
+      res.status(201).json(result);
+    },
+  );
+
+  router.delete("/companies/:companyId/skills/:skillId/files", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    const skillId = req.params.skillId as string;
+    const relativePath = firstQueryString(req.query.path) ?? "";
+    await assertCanMutateCompanySkills(req, companyId);
+    const result = await svc.deleteFile(companyId, skillId, relativePath, skillActor(req));
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "company.skill_file_deleted",
+      entityType: "company_skill",
+      entityId: skillId,
+      details: { path: result.path },
+    });
+
+    res.json(result);
+  });
+
+  router.post("/companies/:companyId/skills/upload", async (req, res) => {
+    const companyId = req.params.companyId as string;
+    await assertCanMutateCompanySkills(req, companyId);
+    await runSkillArchiveUpload(req, res);
+    if (!req.file) {
+      res.status(400).json({ error: "No skill file was uploaded." });
+      return;
+    }
+    const result = await svc.importSkillArchive(
+      companyId,
+      { filename: req.file.originalname, bytes: req.file.buffer },
+      skillActor(req),
+    );
+
+    const actor = getActorInfo(req);
+    await logActivity(db, {
+      companyId,
+      actorType: actor.actorType,
+      actorId: actor.actorId,
+      agentId: actor.agentId,
+      runId: actor.runId,
+      action: "company.skill_uploaded",
+      entityType: "company_skill",
+      entityId: result.id,
+      details: {
+        slug: result.slug,
+        name: result.name,
+        filename: req.file.originalname,
+        fileCount: result.fileInventory.length,
+      },
+    });
+
+    res.status(201).json(result);
+  });
 
   router.post(
     "/companies/:companyId/skills/import",
