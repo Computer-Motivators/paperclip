@@ -113,13 +113,13 @@ export function Chat() {
     refreshIssueChatData();
   }
 
-  async function handleAcceptInteraction(interaction: Extract<IssueThreadInteraction, { kind: "suggest_tasks" | "request_confirmation" }>, selectedClientKeys?: string[]) {
+  async function handleAcceptInteraction(interaction: Extract<IssueThreadInteraction, { kind: "suggest_tasks" | "request_confirmation" | "request_checkbox_confirmation" }>, selectedClientKeys?: string[], selectedOptionIds?: string[]) {
     if (!issueId) return;
-    await issuesApi.acceptInteraction(issueId, interaction.id, selectedClientKeys?.length ? { selectedClientKeys } : undefined);
+    await issuesApi.acceptInteraction(issueId, interaction.id, (selectedClientKeys?.length || selectedOptionIds?.length) ? { selectedClientKeys, selectedOptionIds } : undefined);
     refreshIssueChatData();
   }
 
-  async function handleRejectInteraction(interaction: Extract<IssueThreadInteraction, { kind: "suggest_tasks" | "request_confirmation" }>, reason?: string) {
+  async function handleRejectInteraction(interaction: Extract<IssueThreadInteraction, { kind: "suggest_tasks" | "request_confirmation" | "request_checkbox_confirmation" }>, reason?: string) {
     if (!issueId) return;
     await issuesApi.rejectInteraction(issueId, interaction.id, reason);
     refreshIssueChatData();
