@@ -33,6 +33,7 @@ export function buildCodexExecArgs(
   options: {
     resumeSessionId?: string | null;
     skipGitRepoCheck?: boolean;
+    disableShellZshFork?: boolean;
   } = {},
 ): BuildCodexExecArgsResult {
   const record = asRecord(config);
@@ -48,6 +49,9 @@ export function buildCodexExecArgs(
     record.dangerouslyBypassApprovalsAndSandbox,
     asBoolean(record.dangerouslyBypassSandbox, false),
   );
+  const disableShellZshFork =
+    options.disableShellZshFork === true ||
+    asBoolean(record.disableShellZshFork, false);
   const extraArgs = readExtraArgs(record);
 
   const args = ["exec", "--json"];
@@ -60,6 +64,9 @@ export function buildCodexExecArgs(
   }
   if (fastModeApplied) {
     args.push("-c", 'service_tier="fast"', "-c", "features.fast_mode=true");
+  }
+  if (disableShellZshFork) {
+    args.push("-c", "features.shell_zsh_fork=false");
   }
   if (extraArgs.length > 0) args.push(...extraArgs);
   if (options.resumeSessionId) args.push("resume", options.resumeSessionId, "-");

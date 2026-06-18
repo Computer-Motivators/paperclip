@@ -24,6 +24,10 @@ import { parseCodexJsonl } from "./parse.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 import { buildCodexExecArgs } from "./codex-args.js";
 import {
+  detectCodexShellRuntime,
+  shouldDisableCodexShellZshFork,
+} from "./codex-shell-runtime.js";
+import {
   prepareManagedCodexOpenRouterHome,
   resolveOpenRouterApiKey,
   writeOpenRouterAuthJson,
@@ -64,6 +68,19 @@ function summarizeProbeDetail(stdout: string, stderr: string, parsedError: strin
 
 const CODEX_AUTH_REQUIRED_RE =
   /(?:not\s+logged\s+in|login\s+required|authentication\s+required|unauthorized|invalid(?:\s+or\s+missing)?\s+api(?:[_\s-]?key)?|openrouter[_\s-]?api[_\s-]?key|openai[_\s-]?api[_\s-]?key|api[_\s-]?key.*required|please\s+run\s+`?codex\s+login`?)/i;
+
+const CODEX_SHELL_SPAWN_FAILURE_RE =
+  /(?:exec wrapper|could not spawn|spawn.*shell|failed to (?:launch|start|run) shell)/i;
+
+function detectCodexShellSpawnFailure(stdout: string, stderr: string): string | null {
+  const haystack = `${stdout}\n${stderr}`;
+  const match = haystack.match(CODEX_SHELL_SPAWN_FAILURE_RE);
+  return match ? match[0] : null;
+}
+
+function codexOutputContainsMarker(stdout: string, stderr: string, marker: string): boolean {
+  return stdout.includes(marker) || stderr.includes(marker);
+}
 
 async function prepareCodexHelloProbe(input: {
   runId: string;
@@ -136,7 +153,10 @@ async function prepareCodexHelloProbe(input: {
       ? path.posix.join(input.cwd, ".paperclip-runtime", "codex-openrouter", `probe-home-${input.runId}`)
       : path.join(os.tmpdir(), `paperclip-codex-openrouter-probe-${input.runId}`);
     await fs.mkdir(probeHome, { recursive: true });
-    await writeOpenRouterConfigToml(probeHome, input.modelReasoningEffort ?? null);
+    await writeOpenRouterConfigToml(probeHome, input.modelReasoningEffort ?? null, {
+      codexCommand: input.command,
+      env: input.env,
+    });
     await writeOpenRouterAuthJson(probeHome, input.probeApiKey);
     return {
       command: input.command,
@@ -237,6 +257,35 @@ export async function testEnvironment(
     });
   }
 
+  const shellRuntime = await detectCodexShellRuntime({
+    codexCommand: command,
+    cwd,
+    env: runtimeEnv,
+  });
+  if (shellRuntime.shellZshForkViable) {
+    checks.push({
+      code: "codex_shell_zsh",
+      level: "info",
+      message: "Codex bundled zsh exec bridge is available.",
+      detail: shellRuntime.bundledZshPath ?? undefined,
+    });
+  } else if (shellRuntime.systemZshPath) {
+    checks.push({
+      code: "codex_shell_zsh",
+      level: "warn",
+      message: "System zsh is present, but Codex bundled zsh exec bridge is unavailable.",
+      detail: shellRuntime.systemZshPath,
+      hint: "Paperclip will disable features.shell_zsh_fork automatically. Install a current @openai/codex package or ensure codex-resources/zsh/bin/zsh is present.",
+    });
+  } else {
+    checks.push({
+      code: "codex_shell_zsh",
+      level: "error",
+      message: "Neither Codex bundled zsh nor system zsh is available for shell execution.",
+      hint: "Install zsh in the runtime image (apt install zsh) and redeploy, or install a Codex package that bundles codex-resources/zsh/bin/zsh.",
+    });
+  }
+
   const configOpenRouterKey = env.OPENROUTER_API_KEY;
   const resolvedOpenRouterKey = resolveOpenRouterApiKey(envConfig, process.env);
   if (isNonEmpty(configOpenRouterKey) || isNonEmpty(resolvedOpenRouterKey)) {
@@ -268,9 +317,10 @@ export async function testEnvironment(
         hint: "Use the `codex` CLI command to run the automatic login and installation probe.",
       });
     } else {
+      const disableShellZshFork = shouldDisableCodexShellZshFork(shellRuntime);
       const execArgs = buildCodexExecArgs(
         { ...config, fastMode: false },
-        { skipGitRepoCheck: targetIsSandbox },
+        { skipGitRepoCheck: targetIsSandbox, disableShellZshFork },
       );
       const args = execArgs.args;
       if (execArgs.fastModeIgnoredReason) {
@@ -372,6 +422,69 @@ export async function testEnvironment(
             ...(detail ? { detail } : {}),
             hint: "Run `codex exec --json -` manually in this working directory and prompt `Respond with hello` to debug.",
           });
+        }
+
+        if (isNonEmpty(probeApiKey) && (probe.exitCode ?? 1) === 0) {
+          const shellArgs = buildCodexExecArgs(
+            { ...config, fastMode: false },
+            { skipGitRepoCheck: targetIsSandbox, disableShellZshFork },
+          ).args;
+          const shellProbe = await runAdapterExecutionTargetProcess(
+            runId,
+            target,
+            preparedProbe.command,
+            shellArgs,
+            {
+              cwd,
+              env: preparedProbe.env,
+              timeoutSec: 60,
+              graceSec: 5,
+              stdin: "Run the shell command `echo paperclip-shell-ok` and reply with ok.",
+              onLog: async () => {},
+            },
+          );
+          const shellFailure = detectCodexShellSpawnFailure(shellProbe.stdout, shellProbe.stderr);
+          const shellMarkerFound = codexOutputContainsMarker(
+            shellProbe.stdout,
+            shellProbe.stderr,
+            "paperclip-shell-ok",
+          );
+          if (shellProbe.timedOut) {
+            checks.push({
+              code: "codex_shell_spawn",
+              level: "warn",
+              message: "Codex shell spawn probe timed out.",
+              hint: "Retry the adapter environment test after confirming zsh/bash are installed in the runtime image.",
+            });
+          } else if (shellFailure) {
+            checks.push({
+              code: "codex_shell_spawn",
+              level: "warn",
+              message: "Codex could not spawn a shell for command execution.",
+              detail: shellFailure,
+              hint: "Install zsh in the runtime image and redeploy, or let Paperclip disable features.shell_zsh_fork automatically.",
+            });
+          } else if ((shellProbe.exitCode ?? 1) !== 0) {
+            checks.push({
+              code: "codex_shell_spawn",
+              level: "warn",
+              message: "Codex shell spawn probe exited non-zero.",
+              detail: summarizeProbeDetail(shellProbe.stdout, shellProbe.stderr, null) ?? undefined,
+            });
+          } else if (shellMarkerFound) {
+            checks.push({
+              code: "codex_shell_spawn",
+              level: "info",
+              message: "Codex shell spawn probe succeeded.",
+            });
+          } else {
+            checks.push({
+              code: "codex_shell_spawn",
+              level: "warn",
+              message: "Codex shell spawn probe completed without the expected shell output marker.",
+              hint: "Inspect the run transcript for command_execution failures or auth issues.",
+            });
+          }
         }
       } finally {
         await preparedProbe.cleanup();

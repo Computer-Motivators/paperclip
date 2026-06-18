@@ -54,6 +54,10 @@ import { prepareCodexOpenRouterPromptBundle } from "./prompt-cache.js";
 import { resolveOpenRouterRunCostUsd } from "./openrouter-pricing.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildCodexExecArgs } from "./codex-args.js";
+import {
+  detectCodexShellRuntime,
+  shouldDisableCodexShellZshFork,
+} from "./codex-shell-runtime.js";
 import { SANDBOX_INSTALL_COMMAND } from "../index.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
@@ -355,6 +359,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       : await prepareManagedCodexOpenRouterHome(process.env, onLog, agent.companyId, {
           apiKey: configuredOpenRouterApiKey,
           modelReasoningEffort: modelReasoningEffort || null,
+          codexCommand: command,
         });
   const defaultCodexHome = resolveManagedCodexOpenRouterHomeDir(process.env, agent.companyId);
   const effectiveCodexHome = configuredCodexHome ?? preparedManagedCodexHome ?? defaultCodexHome;
@@ -701,6 +706,18 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     sessionHandoffChars: sessionHandoffNote.length,
     heartbeatPromptChars: renderedPrompt.length,
   };
+  const codexShellRuntime = await detectCodexShellRuntime({
+    codexCommand: command,
+    cwd: effectiveExecutionCwd,
+    env: runtimeEnv,
+  });
+  const disableShellZshFork = shouldDisableCodexShellZshFork(codexShellRuntime);
+  if (disableShellZshFork) {
+    await onLog(
+      "stdout",
+      "[paperclip] Codex bundled zsh exec bridge is unavailable; passing features.shell_zsh_fork=false for this run.\n",
+    );
+  }
 
   const runAttempt = async (resumeSessionId: string | null) => {
     const execArgs = buildCodexExecArgs(
@@ -708,6 +725,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       {
         resumeSessionId,
         skipGitRepoCheck: executionTargetIsSandbox,
+        disableShellZshFork,
       },
     );
     const args = execArgs.args;

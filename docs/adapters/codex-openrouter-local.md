@@ -9,6 +9,7 @@ The `codex_openrouter_local` adapter runs OpenAI's Codex CLI locally with a Pape
 
 - Codex CLI installed (`codex` command available)
 - `OPENROUTER_API_KEY` set in adapter env or server environment
+- A working shell runtime for Codex command execution (`zsh` in the image and/or Codex's bundled `codex-resources/zsh/bin/zsh`)
 
 ## Configuration Fields
 
@@ -21,6 +22,12 @@ The `codex_openrouter_local` adapter runs OpenAI's Codex CLI locally with a Pape
 | `env.OPENROUTER_API_KEY` | string | Yes | OpenRouter API key (or set on server) |
 | `fastMode` | boolean | No | Codex fast tier when supported by the model |
 | `dangerouslyBypassApprovalsAndSandbox` | boolean | No | Skip sandbox (default true) |
+
+## Shell execution in containers
+
+Recent Codex builds route `command_execution` through a bundled zsh exec bridge (`features.shell_zsh_fork`). When that bundled zsh is missing or unusable, Paperclip automatically writes `features.shell_zsh_fork = false` into the managed `$CODEX_HOME/config.toml` and passes the same override on `codex exec`. This restores legacy shell execution using `bash`/`sh` already present in the runtime image.
+
+The adapter environment test reports `codex_shell_zsh` and runs a minimal `codex_shell_spawn` probe (`echo paperclip-shell-ok`) when authentication is available.
 
 ## OpenRouter Routing
 

@@ -6071,7 +6071,8 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
         ? readTransientRecoveryContractFromRun(run)
         : null;
     const codexTransientFallbackMode =
-      agent.adapterType === "codex_local" && transientRecovery
+      (agent.adapterType === "codex_local" || agent.adapterType === "codex_openrouter_local") &&
+      transientRecovery
         ? resolveCodexTransientFallbackMode(nextAttempt)
         : null;
     const transientRetryNotBefore = transientRecovery?.retryNotBefore ?? null;

@@ -27,6 +27,12 @@ describe("codex-openrouter-home", () => {
     expect(toml).toContain('env_http_headers = { "X-Session-Id" = "OPENROUTER_SESSION_ID"');
   });
 
+  it("can disable shell_zsh_fork in config.toml", () => {
+    const toml = buildOpenRouterConfigToml(null, { disableShellZshFork: true });
+    expect(toml).toContain("[features]");
+    expect(toml).toContain("shell_zsh_fork = false");
+  });
+
   it("writes auth.json with OPENROUTER_API_KEY only", async () => {
     const home = await fs.mkdtemp(path.join(os.tmpdir(), "codex-or-auth-"));
     tempDirs.push(home);

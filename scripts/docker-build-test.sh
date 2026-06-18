@@ -40,6 +40,10 @@ echo "==> Verifying key binaries in image"
   rg --version
   python3 --version
   python3 -c "import requests, httpx, yaml, dotenv, bs4, openpyxl"
+  zsh --version
+  bash --version | head -1
+  command -v codex
+  find "$(npm root -g)/@openai/codex" -path "*/codex-resources/zsh/bin/zsh" -executable 2>/dev/null | head -1
   curl --version | head -1
   claude --version 2>/dev/null || echo "claude CLI not found (OK in minimal builds)"
 '

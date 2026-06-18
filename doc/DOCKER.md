@@ -12,7 +12,7 @@ All commands below assume you are in the **project root** (the directory contain
 docker build -t paperclip-local .
 ```
 
-The Dockerfile installs common agent tools (`git`, `gh`, `curl`, `wget`, `ripgrep`, `python3`) and the Claude, Codex, and OpenCode CLIs. `python3` includes common agent packages (`requests`, `httpx`, `PyYAML`, `python-dotenv`, `beautifulsoup4`, `openpyxl`) from [`docker/agent-python-requirements.txt`](../docker/agent-python-requirements.txt).
+The Dockerfile installs common agent tools (`git`, `gh`, `curl`, `wget`, `ripgrep`, `python3`, `zsh`, `bash`) and the Claude, Codex, and OpenCode CLIs. `python3` includes common agent packages (`requests`, `httpx`, `PyYAML`, `python-dotenv`, `beautifulsoup4`, `openpyxl`) from [`docker/agent-python-requirements.txt`](../docker/agent-python-requirements.txt). Codex agents need a working shell runtime (`zsh` and/or Codex's bundled `codex-resources/zsh/bin/zsh`); Paperclip disables `features.shell_zsh_fork` automatically when the bundled exec bridge is unavailable.
 
 Build arguments:
 

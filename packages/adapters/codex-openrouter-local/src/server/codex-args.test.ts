@@ -85,4 +85,23 @@ describe("buildCodexExecArgs", () => {
       "-",
     ]);
   });
+
+  it("disables shell_zsh_fork when requested", () => {
+    const result = buildCodexExecArgs(
+      {
+        model: "gpt-5.3-codex",
+      },
+      { disableShellZshFork: true },
+    );
+
+    expect(result.args).toEqual([
+      "exec",
+      "--json",
+      "--model",
+      "gpt-5.3-codex",
+      "-c",
+      "features.shell_zsh_fork=false",
+      "-",
+    ]);
+  });
 });
