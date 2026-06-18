@@ -521,8 +521,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const traceSessionSeed = runtime.sessionId ??
     (traceIssueId ? `issue:${traceIssueId}` : `run:${runId}`);
   env.OPENROUTER_SESSION_ID = truncateTraceValue(`pc:${agent.companyId}:${agent.id}:${traceSessionSeed}`);
-  env.OPENROUTER_HTTP_REFERER = "https://agents.commonwaste.com";
-  env.OPENROUTER_TITLE = "Common Waste Paperclip";
+  env.OPENROUTER_HTTP_REFERER = "https://paperclip.ing";
+  env.OPENROUTER_TITLE = "Paperclip";
   env.CODEX_HOME = remoteCodexHome ?? effectiveCodexHome;
   if (configuredOpenRouterApiKey) {
     env.OPENROUTER_API_KEY = configuredOpenRouterApiKey;

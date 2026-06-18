@@ -39,6 +39,7 @@ echo "==> Verifying key binaries in image"
   gh --version
   rg --version
   python3 --version
+  python3 -c "import requests, httpx, yaml, dotenv, bs4, openpyxl"
   curl --version | head -1
   claude --version 2>/dev/null || echo "claude CLI not found (OK in minimal builds)"
 '

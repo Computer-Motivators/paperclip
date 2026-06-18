@@ -9,6 +9,10 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && corepack enable
 
+COPY docker/agent-python-requirements.txt docker/install-agent-python-packages.sh /tmp/docker/
+RUN chmod +x /tmp/docker/install-agent-python-packages.sh \
+  && /tmp/docker/install-agent-python-packages.sh
+
 # Modify the existing node user/group to have the specified UID/GID to match host user
 RUN usermod -u $USER_UID --non-unique node \
   && groupmod -g $USER_GID --non-unique node \

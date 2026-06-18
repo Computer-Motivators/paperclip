@@ -15,6 +15,10 @@ RUN apt-get update \
     ripgrep \
   && rm -rf /var/lib/apt/lists/*
 
+COPY docker/agent-python-requirements.txt docker/install-agent-python-packages.sh /tmp/docker/
+RUN chmod +x /tmp/docker/install-agent-python-packages.sh \
+  && /tmp/docker/install-agent-python-packages.sh
+
 RUN ln -sf /usr/bin/fdfind /usr/local/bin/fd
 
 RUN corepack enable \

@@ -193,8 +193,8 @@ def main():
     shell_policy = request.get("shellPolicy") or {"enabled": True, "preset": "dev"}
     shell_env = request.get("shellEnv") or {}
     session_id = request.get("sessionId", "paperclip-session")
-    referer = request.get("httpReferer", "https://agents.commonwaste.com")
-    title = request.get("openRouterTitle", "Common Waste Paperclip")
+    referer = request.get("httpReferer", "https://paperclip.ing")
+    title = request.get("openRouterTitle", "Paperclip")
     user = request.get("user")
     trace = request.get("trace") or {}
     messages = request.get("messages") or []

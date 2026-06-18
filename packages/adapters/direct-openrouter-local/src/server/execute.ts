@@ -56,8 +56,8 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const shellTimeoutSec = Math.max(5, asNumber(config.shellTimeoutSec, 120));
   const timeoutSec = Math.max(0, asNumber(config.timeoutSec, 0));
   const graceSec = Math.max(1, asNumber(config.graceSec, 15));
-  const httpReferer = asString(config.httpReferer, "https://agents.commonwaste.com");
-  const openRouterTitle = asString(config.openRouterTitle, "Common Waste Paperclip");
+  const httpReferer = asString(config.httpReferer, "https://paperclip.ing");
+  const openRouterTitle = asString(config.openRouterTitle, "Paperclip");
   const traceName = asString(config.traceName, "Paperclip Direct OpenRouter");
   const traceEnvironment = asString(config.traceEnvironment, process.env.NODE_ENV || "development");
   const promptTemplate = asString(config.promptTemplate, DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE);
