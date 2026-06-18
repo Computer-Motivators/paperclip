@@ -20,6 +20,7 @@ import { useToastActions } from "../context/ToastContext";
 import { useBreadcrumbs } from "../context/BreadcrumbContext";
 import { assigneeValueFromSelection, suggestedCommentAssigneeValue } from "../lib/assignees";
 import { buildCompanyUserInlineOptions, buildCompanyUserLabelMap, buildCompanyUserProfileMap, buildMarkdownMentionOptions, isAgentTaskTarget } from "../lib/company-members";
+import { extractIssueTimelineEvents } from "../lib/issue-timeline-events";
 import { queryKeys } from "../lib/queryKeys";
 import { keepPreviousDataForSameQueryTail } from "../lib/query-placeholder-data";
 import { collectLiveIssueIds } from "../lib/liveIssueIds";
@@ -42,9 +43,11 @@ import {
   applyOptimisticIssueFieldUpdate,
   applyOptimisticIssueFieldUpdateToCollection,
   applyOptimisticIssueCommentUpdate,
+  applyLocalQueuedIssueCommentState,
   createOptimisticIssueComment,
   flattenIssueCommentPages,
   getNextIssueCommentPageParam,
+  isQueuedIssueComment,
   loadRemainingIssueCommentPages,
   matchesIssueRef,
   mergeIssueComments,
@@ -57,7 +60,6 @@ import {
 } from "../lib/optimistic-issue-comments";
 import { clearIssueExecutionRun, removeLiveRunById, upsertInterruptedRun } from "../lib/optimistic-issue-runs";
 import { useProjectOrder } from "../hooks/useProjectOrder";
-import { useIssueChatController } from "../hooks/useIssueChatController";
 import { relativeTime, cn, formatDurationMs, formatTokens, visibleRunCostUsd } from "../lib/utils";
 import { ApprovalCard } from "../components/ApprovalCard";
 import { InlineEditor } from "../components/InlineEditor";
@@ -805,21 +807,140 @@ const IssueDetailChatTab = memo(function IssueDetailChatTab({
   // frozen master fork so the task thread looks exactly like master.
   const { enabled: conferenceRoomChatEnabled } = useConferenceRoomChatEnabled();
   const ThreadComponent = conferenceRoomChatEnabled ? IssueChatThread : IssueChatThreadClassic;
-  const {
-    commentsWithRunMeta,
-    timelineEvents,
-    timelineRuns,
-    resolvedLiveRuns,
-    resolvedActiveRun,
-    runningIssueRun,
-  } = useIssueChatController({
-    issueId,
-    issueStatus,
-    executionRunId,
+  const { data: activity } = useQuery({
+    queryKey: queryKeys.issues.activity(issueId),
+    queryFn: () => activityApi.forIssue(issueId),
+    placeholderData: keepPreviousDataForSameQueryTail<ActivityEvent[]>(issueId),
+  });
+  const { data: liveRuns } = useQuery({
+    queryKey: queryKeys.issues.liveRuns(issueId),
+    queryFn: () => heartbeatsApi.liveRunsForIssue(issueId),
+    refetchInterval: 3000,
+    placeholderData: keepPreviousDataForSameQueryTail<LiveRunForIssue[]>(issueId),
+  });
+  const resolvedLiveRuns = liveRuns ?? [];
+  const liveRunCount = resolvedLiveRuns.length;
+  const { data: activeRun = null } = useQuery({
+    queryKey: queryKeys.issues.activeRun(issueId),
+    queryFn: () => heartbeatsApi.activeRunForIssue(issueId),
+    enabled: !!executionRunId || issueStatus === "in_progress",
+    refetchInterval: liveRunCount > 0 ? false : 3000,
+    placeholderData: keepPreviousDataForSameQueryTail<ActiveRunForIssue | null>(issueId),
+  });
+  const resolvedActiveRun = useMemo(
+    () => resolveIssueActiveRun({ status: issueStatus, executionRunId }, activeRun),
+    [activeRun, executionRunId, issueStatus],
+  );
+  const hasLiveRuns = liveRunCount > 0 || !!resolvedActiveRun;
+  const { data: linkedRuns } = useQuery({
+    queryKey: queryKeys.issues.runs(issueId),
+    queryFn: () => activityApi.runsForIssue(issueId),
+    refetchInterval: hasLiveRuns ? 5000 : false,
+    placeholderData: keepPreviousDataForSameQueryTail<RunForIssue[]>(issueId),
+  });
+  const resolvedActivity = activity ?? [];
+  const resolvedLinkedRuns = linkedRuns ?? [];
+
+  const runningIssueRun = useMemo(
+    () => resolveRunningIssueRun(resolvedActiveRun, resolvedLiveRuns),
+    [resolvedActiveRun, resolvedLiveRuns],
+  );
+  const liveRunIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const run of resolvedLiveRuns) ids.add(run.id);
+    if (resolvedActiveRun) ids.add(resolvedActiveRun.id);
+    return ids;
+  }, [resolvedActiveRun, resolvedLiveRuns]);
+  const timelineRuns = useMemo(() => {
+    const historicalRuns = liveRunIds.size === 0
+      ? resolvedLinkedRuns
+      : resolvedLinkedRuns.filter((run) => !liveRunIds.has(run.runId));
+    return historicalRuns.map((run) => ({
+      ...run,
+      adapterType: run.adapterType,
+      hasStoredOutput: (run.logBytes ?? 0) > 0,
+    }));
+  }, [liveRunIds, resolvedLinkedRuns]);
+  const commentsWithRunMeta = useMemo<IssueDetailComment[]>(() => {
+    const activeRunStartedAt = runningIssueRun?.startedAt ?? runningIssueRun?.createdAt ?? null;
+    const runMetaByCommentId = new Map<string, { runId: string; runAgentId: string | null; interruptedRunId: string | null }>();
+    const followUpCommentIds = new Set<string>();
+    const agentIdByRunId = new Map<string, string>();
+
+    for (const run of resolvedLinkedRuns) {
+      agentIdByRunId.set(run.runId, run.agentId);
+    }
+    for (const evt of resolvedActivity) {
+      if (evt.action !== "issue.comment_added" || !evt.runId) continue;
+      const details = evt.details ?? {};
+      const commentId = typeof details["commentId"] === "string" ? details["commentId"] : null;
+      if (!commentId || runMetaByCommentId.has(commentId)) continue;
+      const interruptedRunId =
+        typeof details["interruptedRunId"] === "string" ? details["interruptedRunId"] : null;
+      runMetaByCommentId.set(commentId, {
+        runId: evt.runId,
+        runAgentId: evt.agentId ?? agentIdByRunId.get(evt.runId) ?? null,
+        interruptedRunId,
+      });
+    }
+    for (const evt of resolvedActivity) {
+      if (evt.action !== "issue.comment_added") continue;
+      const details = evt.details ?? {};
+      const commentId = typeof details["commentId"] === "string" ? details["commentId"] : null;
+      if (!commentId) continue;
+      if (details["followUpRequested"] === true || details["resumeIntent"] === true) {
+        followUpCommentIds.add(commentId);
+      }
+    }
+
+    return comments.map((comment) => {
+      const meta = runMetaByCommentId.get(comment.id);
+      const nextComment: IssueDetailComment = meta ? { ...comment, ...meta } : { ...comment };
+      if (followUpCommentIds.has(comment.id)) {
+        nextComment.followUpRequested = true;
+      }
+      const queuedTargetRunId = locallyQueuedCommentRunIds.get(comment.id) ?? null;
+      const locallyQueuedComment = applyLocalQueuedIssueCommentState(nextComment, {
+        queuedTargetRunId,
+        targetRunIsLive: queuedTargetRunId ? liveRunIds.has(queuedTargetRunId) : false,
+        runningRunId: runningIssueRun?.id ?? null,
+      });
+      if (locallyQueuedComment !== nextComment) {
+        return locallyQueuedComment;
+      }
+      if (
+        isQueuedIssueComment({
+          comment: nextComment,
+          activeRunStartedAt,
+          activeRunAgentId: runningIssueRun?.agentId ?? null,
+          activeRunCommentId: runningIssueRun?.contextCommentId ?? null,
+          activeRunWakeCommentId: runningIssueRun?.contextWakeCommentId ?? null,
+          runId: meta?.runId ?? nextComment.runId ?? null,
+          interruptedRunId: meta?.interruptedRunId ?? nextComment.interruptedRunId ?? null,
+        })
+      ) {
+        return {
+          ...nextComment,
+          queueState: "queued" as const,
+          queueTargetRunId: runningIssueRun?.id ?? nextComment.queueTargetRunId ?? null,
+          queueReason: queuedCommentReason,
+        };
+      }
+      return nextComment;
+    });
+  }, [
     comments,
+    liveRunIds,
     locallyQueuedCommentRunIds,
     queuedCommentReason,
-  });
+    resolvedActivity,
+    resolvedLinkedRuns,
+    runningIssueRun,
+  ]);
+  const timelineEvents = useMemo(
+    () => extractIssueTimelineEvents(resolvedActivity),
+    [resolvedActivity],
+  );
 
   return (
     <div className="space-y-3">
