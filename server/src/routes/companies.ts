@@ -10,7 +10,6 @@ import {
   companyPortabilityImportSchema,
   companyPortabilityPreviewSchema,
   createCompanySchema,
-  boardChatAgentSchema,
   feedbackTargetTypeSchema,
   feedbackTraceStatusSchema,
   feedbackVoteValueSchema,
@@ -21,7 +20,6 @@ import { badRequest, forbidden } from "../errors.js";
 import { validate } from "../middleware/validate.js";
 import {
   accessService,
-  boardChatService,
   agentService,
   budgetService,
   companyArtifactsService,
@@ -38,7 +36,6 @@ export function companyRoutes(db: Db, storage?: StorageService) {
   const router = Router();
   const svc = companyService(db);
   const agents = agentService(db);
-  const boardChat = boardChatService(db);
   const portability = companyPortabilityService(db, storage);
   const access = accessService(db);
   const budgets = budgetService(db);
@@ -151,33 +148,6 @@ export function companyRoutes(db: Db, storage?: StorageService) {
       return;
     }
     res.json(company);
-  });
-
-  router.get("/:companyId/board-chat", async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    assertBoard(req);
-    const userId = req.actor.userId ?? "local-board";
-    const state = await boardChat.get(companyId, userId);
-    res.json(state);
-  });
-
-  router.post("/:companyId/board-chat", validate(boardChatAgentSchema), async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    assertBoard(req);
-    const userId = req.actor.userId ?? "local-board";
-    const state = await boardChat.ensure(companyId, userId, req.body.agentId);
-    res.json(state);
-  });
-
-  router.patch("/:companyId/board-chat/agent", validate(boardChatAgentSchema), async (req, res) => {
-    const companyId = req.params.companyId as string;
-    assertCompanyAccess(req, companyId);
-    assertBoard(req);
-    const userId = req.actor.userId ?? "local-board";
-    const state = await boardChat.updateAgent(companyId, userId, req.body.agentId);
-    res.json(state);
   });
 
   router.get("/:companyId/feedback-traces", async (req, res) => {

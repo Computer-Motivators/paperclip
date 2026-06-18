@@ -315,7 +315,6 @@ export {
 } from "./network-bind.js";
 
 export type {
-  BoardChatState,
   Company,
   Environment,
   EnvironmentLease,
@@ -919,7 +918,6 @@ export {
 
 export {
   createCompanySchema,
-  boardChatAgentSchema,
   updateCompanySchema,
   updateCompanyBrandingSchema,
   feedbackTargetTypeSchema,
@@ -927,7 +925,6 @@ export {
   feedbackVoteValueSchema,
   upsertIssueFeedbackVoteSchema,
   type CreateCompany,
-  type BoardChatAgentInput,
   type UpdateCompany,
   type UpdateCompanyBranding,
   type UpsertIssueFeedbackVote,

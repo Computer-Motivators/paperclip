@@ -3,7 +3,6 @@ export const queryKeys = {
     all: ["companies"] as const,
     detail: (id: string) => ["companies", id] as const,
     stats: ["companies", "stats"] as const,
-    boardChat: (companyId: string) => ["companies", companyId, "board-chat"] as const,
   },
   companySkills: {
     list: (companyId: string) => ["company-skills", companyId] as const,

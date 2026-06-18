@@ -10,7 +10,6 @@ import {
   Network,
   Boxes,
   Repeat,
-  MessageSquare,
   GitBranch,
   Package,
   Settings,
@@ -174,7 +173,6 @@ export function Sidebar() {
 
         <SidebarSection label="Work">
           <SidebarNavItem to="/issues" label="Tasks" icon={CircleDot} />
-          <SidebarNavItem to="/chat" label="Chat" icon={MessageSquare} />
           <SidebarNavItem to="/routines" label="Routines" icon={Repeat} />
           <SidebarNavItem to="/goals" label="Goals" icon={Target} />
           <SidebarNavItem to="/artifacts" label="Artifacts" icon={Package} />

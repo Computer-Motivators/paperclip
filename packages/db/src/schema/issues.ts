@@ -141,13 +141,5 @@ export const issues = pgTable(
           and ${table.hiddenAt} is null
           and ${table.status} not in ('done', 'cancelled')`,
       ),
-    activeBoardChatIdx: uniqueIndex("issues_active_board_chat_uq")
-      .on(table.companyId, table.originKind, table.originId)
-      .where(
-        sql`${table.originKind} = 'board_chat'
-          and ${table.originId} is not null
-          and ${table.hiddenAt} is not null
-          and ${table.status} <> 'cancelled'`,
-      ),
   }),
 );

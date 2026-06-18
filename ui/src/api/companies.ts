@@ -1,6 +1,5 @@
 import type {
   Company,
-  BoardChatState,
   CompanyPortabilityExportRequest,
   CompanyPortabilityExportPreviewResult,
   CompanyPortabilityExportResult,
@@ -59,10 +58,4 @@ export const companiesApi = {
     api.post<CompanyPortabilityPreviewResult>("/companies/import/preview", data),
   importBundle: (data: CompanyPortabilityImportRequest) =>
     api.post<CompanyPortabilityImportResult>("/companies/import", data),
-  getBoardChat: (companyId: string) =>
-    api.get<BoardChatState>(`/companies/${companyId}/board-chat`),
-  ensureBoardChat: (companyId: string, data: { agentId: string }) =>
-    api.post<BoardChatState>(`/companies/${companyId}/board-chat`, data),
-  updateBoardChatAgent: (companyId: string, data: { agentId: string }) =>
-    api.patch<BoardChatState>(`/companies/${companyId}/board-chat/agent`, data),
 };

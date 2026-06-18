@@ -123,14 +123,12 @@ Section header: **Work** (collapsible, with a chevron toggle)
 
 ```
   Work                     ▼
-    Chat
     Issues
     Projects
     Goals
     Views
 ```
 
-- **Chat** — a persistent per-user agent conversation backed by one hidden issue thread, preserving history and session continuity.
 - **Issues** — main task list for the selected company. This is the workhorse view.
 - **Projects** — project list. Projects group issues and link to goals.
 - **Goals** — company goal hierarchy.
