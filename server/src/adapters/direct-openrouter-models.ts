@@ -1,5 +1,5 @@
 import type { AdapterModel } from "./types.js";
-import { models as codexOpenRouterFallbackModels } from "@computermotivators/adapter-codex-openrouter-local";
+import { models as directOpenRouterFallbackModels } from "@computermotivators/adapter-direct-openrouter-local";
 import {
   fetchOpenRouterModelCapabilities,
   mergeAdapterModelsWithFallback,
@@ -14,20 +14,15 @@ function fingerprint(apiKey: string): string {
   return `${apiKey.length}:${apiKey.slice(-6)}`;
 }
 
-function preferOpenAiCodingModels(models: AdapterModel[]): AdapterModel[] {
-  const openAi = models.filter((model) => model.id.startsWith("openai/"));
-  return openAi.length > 0 ? openAi : models;
-}
-
 function resolveOpenRouterApiKey(): string | null {
   const envKey = process.env.OPENROUTER_API_KEY?.trim();
   return envKey && envKey.length > 0 ? envKey : null;
 }
 
-async function loadCodexOpenRouterModels(options?: { forceRefresh?: boolean }): Promise<AdapterModel[]> {
+async function loadDirectOpenRouterModels(options?: { forceRefresh?: boolean }): Promise<AdapterModel[]> {
   const forceRefresh = options?.forceRefresh === true;
   const apiKey = resolveOpenRouterApiKey();
-  const fallback = mergeAdapterModelsWithFallback([], codexOpenRouterFallbackModels);
+  const fallback = mergeAdapterModelsWithFallback([], directOpenRouterFallbackModels);
   if (!apiKey) return fallback;
 
   const now = Date.now();
@@ -36,11 +31,9 @@ async function loadCodexOpenRouterModels(options?: { forceRefresh?: boolean }): 
     return cached.models;
   }
 
-  const fetched = preferOpenAiCodingModels(
-    (await fetchOpenRouterModelCapabilities(apiKey)).map(toAdapterModelFromOpenRouterCapabilities),
-  );
+  const fetched = (await fetchOpenRouterModelCapabilities(apiKey)).map(toAdapterModelFromOpenRouterCapabilities);
   if (fetched.length > 0) {
-    const merged = mergeAdapterModelsWithFallback(fetched, codexOpenRouterFallbackModels);
+    const merged = mergeAdapterModelsWithFallback(fetched, directOpenRouterFallbackModels);
     cached = {
       keyFingerprint,
       expiresAt: now + OPENROUTER_MODELS_CACHE_TTL_MS,
@@ -56,14 +49,14 @@ async function loadCodexOpenRouterModels(options?: { forceRefresh?: boolean }): 
   return fallback;
 }
 
-export async function listCodexOpenRouterModels(): Promise<AdapterModel[]> {
-  return loadCodexOpenRouterModels();
+export async function listDirectOpenRouterModels(): Promise<AdapterModel[]> {
+  return loadDirectOpenRouterModels();
 }
 
-export async function refreshCodexOpenRouterModels(): Promise<AdapterModel[]> {
-  return loadCodexOpenRouterModels({ forceRefresh: true });
+export async function refreshDirectOpenRouterModels(): Promise<AdapterModel[]> {
+  return loadDirectOpenRouterModels({ forceRefresh: true });
 }
 
-export function resetCodexOpenRouterModelsCacheForTests() {
+export function resetDirectOpenRouterModelsCacheForTests() {
   cached = null;
 }

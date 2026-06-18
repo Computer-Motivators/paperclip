@@ -34,6 +34,7 @@ export function buildCodexExecArgs(
     resumeSessionId?: string | null;
     skipGitRepoCheck?: boolean;
     disableShellZshFork?: boolean;
+    imagePaths?: string[];
   } = {},
 ): BuildCodexExecArgsResult {
   const record = asRecord(config);
@@ -69,8 +70,20 @@ export function buildCodexExecArgs(
     args.push("-c", "features.shell_zsh_fork=false");
   }
   if (extraArgs.length > 0) args.push(...extraArgs);
-  if (options.resumeSessionId) args.push("resume", options.resumeSessionId, "-");
-  else args.push("-");
+  if (options.resumeSessionId) {
+    args.push("resume", options.resumeSessionId);
+    for (const imagePath of options.imagePaths ?? []) {
+      const trimmed = imagePath.trim();
+      if (trimmed) args.push("--image", trimmed);
+    }
+    args.push("-");
+  } else {
+    for (const imagePath of options.imagePaths ?? []) {
+      const trimmed = imagePath.trim();
+      if (trimmed) args.push("--image", trimmed);
+    }
+    args.push("-");
+  }
 
   return {
     args,

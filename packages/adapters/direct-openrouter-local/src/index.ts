@@ -7,11 +7,11 @@ export const DEFAULT_DIRECT_OPENROUTER_MODEL = "openai/gpt-5-mini";
 export const DIRECT_OPENROUTER_TOOL_MODES = ["native", "text"] as const;
 
 export const models = [
-  { id: DEFAULT_DIRECT_OPENROUTER_MODEL, label: DEFAULT_DIRECT_OPENROUTER_MODEL },
-  { id: "openai/gpt-5.4", label: "openai/gpt-5.4" },
-  { id: "openai/gpt-5.3-codex", label: "openai/gpt-5.3-codex" },
-  { id: "anthropic/claude-sonnet-4", label: "anthropic/claude-sonnet-4" },
-  { id: "google/gemini-2.5-pro", label: "google/gemini-2.5-pro" },
+  { id: DEFAULT_DIRECT_OPENROUTER_MODEL, label: DEFAULT_DIRECT_OPENROUTER_MODEL, supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "openai/gpt-5.4", label: "openai/gpt-5.4", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "openai/gpt-5.3-codex", label: "openai/gpt-5.3-codex", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "anthropic/claude-sonnet-4", label: "anthropic/claude-sonnet-4", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "google/gemini-2.5-pro", label: "google/gemini-2.5-pro", supportsImageInput: true, inputModalities: ["text", "image"] },
 ];
 
 export const modelProfiles: AdapterModelProfileDefinition[] = [
@@ -53,9 +53,13 @@ Core fields:
 - maxShellCommandLength (number, optional): max run_shell command length, default 4096.
 - timeoutSec (number, optional): adapter-level timeout in seconds.
 - graceSec (number, optional): SIGTERM grace period in seconds.
+- visionMode (string, optional): auto (default) or off
+- maxVisionImages (number, optional): max images attached per run (default 8)
+- maxVisionImageBytes (number, optional): max bytes per staged image (default 10 MiB)
 
 OpenRouter protocol:
 - Always sends session_id and X-Session-Id.
 - Always includes trace metadata.
 - Always enables prompt caching where supported by the selected model.
+- Vision: when visionMode=auto and the model supports image input, run-start issue images are sent as image_url parts; read_image (path or attachmentId) and list_workspace_images support mid-run vision.
 `;

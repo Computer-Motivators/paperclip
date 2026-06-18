@@ -1,3 +1,4 @@
+import { collectPaperclipVisionImages } from "./heartbeat-vision-images.js";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { execFile as execFileCallback } from "node:child_process";
@@ -22,6 +23,7 @@ import {
   type RoutineRevisionSnapshotV1,
   type RunLivenessState,
   type SourceTrustMetadata,
+  PAPERCLIP_VISION_IMAGES_CONTEXT_KEY,
 } from "@paperclipai/shared";
 import {
   agents,
@@ -8031,6 +8033,17 @@ export function heartbeatService(db: Db, options: HeartbeatServiceOptions = {}) 
       context[PAPERCLIP_WAKE_PAYLOAD_KEY] = paperclipWakePayload;
     } else {
       delete context[PAPERCLIP_WAKE_PAYLOAD_KEY];
+    }
+    const visionImages = await collectPaperclipVisionImages({
+      db,
+      companyId: agent.companyId,
+      issueId: issueRef?.id ?? readNonEmptyString(context.issueId),
+      context,
+    });
+    if (visionImages.length > 0) {
+      context[PAPERCLIP_VISION_IMAGES_CONTEXT_KEY] = visionImages;
+    } else {
+      delete context[PAPERCLIP_VISION_IMAGES_CONTEXT_KEY];
     }
     const taskMarkdown = buildPaperclipTaskMarkdown({
       issue: issueRef

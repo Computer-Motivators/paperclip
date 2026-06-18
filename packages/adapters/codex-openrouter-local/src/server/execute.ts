@@ -41,6 +41,7 @@ import {
 import {
   parseCodexJsonl,
   extractCodexRetryNotBefore,
+  isCodexImageProcessingError,
   isCodexTransientUpstreamError,
   isCodexUnknownSessionError,
 } from "./parse.js";
@@ -54,11 +55,18 @@ import { prepareCodexOpenRouterPromptBundle } from "./prompt-cache.js";
 import { resolveOpenRouterRunCostUsd } from "./openrouter-pricing.js";
 import { resolveCodexDesiredSkillNames } from "./skills.js";
 import { buildCodexExecArgs } from "./codex-args.js";
+import { prepareAdapterVisionRun } from "@paperclipai/adapter-utils/adapter-vision-run";
+import { readAdapterVisionConfig } from "@paperclipai/adapter-utils/vision-config";
+import {
+  CODEX_VISION_SUPPLEMENTAL_PROMPT,
+  renderAdapterVisionGuidance,
+} from "@paperclipai/adapter-utils/vision-guidance";
+import { stagedVisionExcludeSets } from "@paperclipai/adapter-utils/vision-queue";
 import {
   detectCodexShellRuntime,
   shouldDisableCodexShellZshFork,
 } from "./codex-shell-runtime.js";
-import { SANDBOX_INSTALL_COMMAND } from "../index.js";
+import { SANDBOX_INSTALL_COMMAND, models as codexOpenRouterFallbackModels } from "../index.js";
 
 const __moduleDir = path.dirname(fileURLToPath(import.meta.url));
 const CODEX_ROLLOUT_NOISE_RE =
@@ -718,14 +726,50 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       "[paperclip] Codex bundled zsh exec bridge is unavailable; passing features.shell_zsh_fork=false for this run.\n",
     );
   }
+  const openRouterApiKey = resolveOpenRouterApiKey(runtimeEnv);
+  const visionConfig = readAdapterVisionConfig(config);
+  const visionRun = await prepareAdapterVisionRun({
+    config,
+    context,
+    runId,
+    cwd: effectiveExecutionCwd,
+    workspaceRoot: effectiveExecutionCwd,
+    modelId: normalizedModel || model,
+    apiUrl: runtimeEnv.PAPERCLIP_API_URL,
+    apiKey: authToken ?? runtimeEnv.PAPERCLIP_API_KEY,
+    openRouterApiKey,
+    provider: "openrouter",
+    fallbackModels: codexOpenRouterFallbackModels,
+    isResumeDelta: shouldUseResumeDeltaPrompt,
+  });
+  if (visionRun.notes.length > 0) {
+    commandNotes.push(...visionRun.notes);
+  }
+  const visionGuidance = renderAdapterVisionGuidance({
+    adapterKind: "codex",
+    modelSupportsImageInput: visionRun.modelSupportsImageInput,
+  });
+  if (visionGuidance) {
+    commandNotes.push(visionGuidance);
+  }
 
-  const runAttempt = async (resumeSessionId: string | null) => {
+  const runAttempt = async (
+    resumeSessionId: string | null,
+    overrides: {
+      prompt?: string;
+      imagePaths?: string[];
+      emitMeta?: boolean;
+    } = {},
+  ) => {
+    const attemptPrompt = overrides.prompt ?? prompt;
+    const attemptImagePaths = overrides.imagePaths ?? visionRun.imagePaths;
     const execArgs = buildCodexExecArgs(
       forceSaferInvocation ? { ...config, fastMode: false } : config,
       {
         resumeSessionId,
         skipGitRepoCheck: executionTargetIsSandbox,
         disableShellZshFork,
+        imagePaths: attemptImagePaths,
       },
     );
     const args = execArgs.args;
@@ -733,27 +777,30 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
       execArgs.fastModeIgnoredReason == null
         ? commandNotes
         : [...commandNotes, execArgs.fastModeIgnoredReason];
-    if (onMeta) {
+    if (onMeta && overrides.emitMeta !== false) {
       await onMeta({
         adapterType: "codex_openrouter_local",
         command: resolvedCommand,
         cwd: effectiveExecutionCwd,
         commandNotes: commandNotesWithFastMode,
         commandArgs: args.map((value, idx) => {
-          if (idx === args.length - 1 && value !== "-") return `<prompt ${prompt.length} chars>`;
+          if (idx === args.length - 1 && value !== "-") return `<prompt ${attemptPrompt.length} chars>`;
           return value;
         }),
         env: loggedEnv,
-        prompt,
+        prompt: attemptPrompt,
         promptMetrics,
         context,
+        visionImagesStaged: attemptImagePaths.length,
+        visionImagesSkipped: visionRun.skipped.length,
+        modelSupportsImageInput: visionRun.modelSupportsImageInput,
       });
     }
 
     const proc = await runAdapterExecutionTargetProcess(runId, runtimeExecutionTarget, command, args, {
       cwd,
       env,
-      stdin: prompt,
+      stdin: attemptPrompt,
       timeoutSec,
       graceSec,
       onSpawn,
@@ -879,22 +926,80 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     });
 
   try {
-    const initial = await runAttempt(sessionId);
+    let finalAttempt = await runAttempt(sessionId);
     if (
       sessionId &&
-      !initial.proc.timedOut &&
-      (initial.proc.exitCode ?? 0) !== 0 &&
-      isCodexUnknownSessionError(initial.proc.stdout, initial.rawStderr)
+      !finalAttempt.proc.timedOut &&
+      (finalAttempt.proc.exitCode ?? 0) !== 0 &&
+      isCodexUnknownSessionError(finalAttempt.proc.stdout, finalAttempt.rawStderr)
     ) {
       await onLog(
         "stdout",
         `[paperclip] Codex resume session "${sessionId}" is unavailable; retrying with a fresh session.\n`,
       );
-      const retry = await runAttempt(null);
-      return toResult(retry, true, true, await resolveAttemptCostUsd(retry.parsed));
+      finalAttempt = await runAttempt(null);
+      return toResult(finalAttempt, true, true, await resolveAttemptCostUsd(finalAttempt.parsed));
     }
 
-    return toResult(initial, false, false, await resolveAttemptCostUsd(initial.parsed));
+    const primarySessionId =
+      finalAttempt.parsed.sessionId ??
+      sessionId ??
+      runtimeSessionId ??
+      runtime.sessionId ??
+      null;
+    if (
+      !finalAttempt.proc.timedOut &&
+      (finalAttempt.proc.exitCode ?? 0) === 0 &&
+      visionConfig.visionSupplementalResume &&
+      visionRun.modelSupportsImageInput &&
+      primarySessionId
+    ) {
+      const { excludeAttachmentIds, excludeWorkspacePaths } = stagedVisionExcludeSets(visionRun.staged);
+      const supplementalVision = await prepareAdapterVisionRun({
+        config,
+        context: {},
+        runId,
+        cwd: effectiveExecutionCwd,
+        workspaceRoot: effectiveExecutionCwd,
+        modelId: normalizedModel || model,
+        apiUrl: runtimeEnv.PAPERCLIP_API_URL,
+        apiKey: authToken ?? runtimeEnv.PAPERCLIP_API_KEY,
+        openRouterApiKey,
+        provider: "openrouter",
+        fallbackModels: codexOpenRouterFallbackModels,
+        excludeAttachmentIds,
+        excludeWorkspacePaths,
+      });
+      if (supplementalVision.imagePaths.length > 0) {
+        await onLog(
+          "stdout",
+          `[paperclip] Running supplemental Codex vision resume with ${supplementalVision.imagePaths.length} queued image(s).\n`,
+        );
+        const supplementalAttempt = await runAttempt(primarySessionId, {
+          prompt: CODEX_VISION_SUPPLEMENTAL_PROMPT,
+          imagePaths: supplementalVision.imagePaths,
+          emitMeta: false,
+        });
+        if (
+          isCodexImageProcessingError(
+            supplementalAttempt.proc.stdout,
+            supplementalAttempt.rawStderr,
+          )
+        ) {
+          await onLog(
+            "stdout",
+            "[paperclip] Supplemental Codex vision resume failed image processing; keeping primary run result.\n",
+          );
+        } else if (
+          !supplementalAttempt.proc.timedOut &&
+          (supplementalAttempt.proc.exitCode ?? 0) === 0
+        ) {
+          finalAttempt = supplementalAttempt;
+        }
+      }
+    }
+
+    return toResult(finalAttempt, false, false, await resolveAttemptCostUsd(finalAttempt.parsed));
   } finally {
     if (paperclipBridge) {
       await paperclipBridge.stop();

@@ -104,4 +104,46 @@ describe("buildCodexExecArgs", () => {
       "-",
     ]);
   });
+
+  it("passes --image paths before stdin placeholder", () => {
+    const result = buildCodexExecArgs(
+      { model: "openai/gpt-5.4" },
+      { imagePaths: ["/tmp/a.png"] },
+    );
+
+    expect(result.args).toEqual([
+      "exec",
+      "--json",
+      "--model",
+      "openai/gpt-5.4",
+      "--image",
+      "/tmp/a.png",
+      "-",
+    ]);
+  });
+
+  it("places resume before --image flags", () => {
+    const result = buildCodexExecArgs(
+      { model: "openai/gpt-5.4" },
+      {
+        resumeSessionId: "session-123",
+        imagePaths: ["/tmp/a.png"],
+        disableShellZshFork: true,
+      },
+    );
+
+    expect(result.args).toEqual([
+      "exec",
+      "--json",
+      "--model",
+      "openai/gpt-5.4",
+      "-c",
+      "features.shell_zsh_fork=false",
+      "resume",
+      "session-123",
+      "--image",
+      "/tmp/a.png",
+      "-",
+    ]);
+  });
 });

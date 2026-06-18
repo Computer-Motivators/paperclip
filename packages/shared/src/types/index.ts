@@ -249,6 +249,10 @@ export type {
   ResolvedWorkspaceResource,
 } from "./workspace-file-resource.js";
 export type {
+  PaperclipVisionImageRef,
+  PaperclipVisionImageSource,
+} from "./vision-image.js";
+export type {
   IssueWorkProduct,
   IssueWorkProductType,
   IssueWorkProductProvider,

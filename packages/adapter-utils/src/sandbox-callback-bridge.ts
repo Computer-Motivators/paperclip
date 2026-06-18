@@ -67,6 +67,9 @@ export const DEFAULT_SANDBOX_CALLBACK_BRIDGE_ROUTE_ALLOWLIST: readonly SandboxCa
   { method: "PATCH", path: /^\/api\/issues\/[^/]+$/ },
   { method: "GET", path: /^\/api\/issues\/[^/]+\/approvals$/ },
 
+  // Attachment content for mid-run vision staging in sandboxed agents
+  { method: "GET", path: /^\/api\/attachments\/[^/]+\/content$/ },
+
   // Issue-thread interactions (suggest tasks, ask questions, request confirmation)
   { method: "GET", path: /^\/api\/issues\/[^/]+\/interactions(?:\/[^/]+)?$/ },
   { method: "POST", path: /^\/api\/issues\/[^/]+\/interactions$/ },

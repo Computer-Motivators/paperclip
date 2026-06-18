@@ -22,8 +22,18 @@ The `codex_openrouter_local` adapter runs OpenAI's Codex CLI locally with a Pape
 | `env.OPENROUTER_API_KEY` | string | Yes | OpenRouter API key (or set on server) |
 | `fastMode` | boolean | No | Codex fast tier when supported by the model |
 | `dangerouslyBypassApprovalsAndSandbox` | boolean | No | Skip sandbox (default true) |
+| `visionMode` | string | No | `auto` (default) or `off` — attach issue vision images when the model supports image input |
+| `visionAttachOnResume` | boolean | No | Attach vision images on resumed session wake deltas (default `true`) |
+| `visionSupplementalResume` | boolean | No | Chain supplemental `codex exec resume --image` when `.paperclip/vision-queue.json` is non-empty (default `true`) |
+| `maxVisionImages` | number | No | Max images attached per run (default 8) |
+| `maxVisionImageBytes` | number | No | Max bytes per staged image (default 10 MiB) |
 
-## Shell execution in containers
+## Vision input
+
+When `visionMode` is `auto`, Paperclip discovers image attachments from wake comments, inline markdown attachment URLs, and recent issue image attachments, then stages them locally and passes them to Codex via `codex exec --image`. Images are only attached when OpenRouter model metadata (or adapter fallback metadata) reports `image` in `architecture.input_modalities`. Non-vision models skip image attachment fail-closed with a run log note instead of embedding raw bytes in the text prompt.
+
+For mid-run images, queue workspace paths or attachment IDs in `.paperclip/vision-queue.json`. See `skills/paperclip/references/vision.md`.
+
 
 Recent Codex builds route `command_execution` through a bundled zsh exec bridge (`features.shell_zsh_fork`). When that bundled zsh is missing or unusable, Paperclip automatically writes `features.shell_zsh_fork = false` into the managed `$CODEX_HOME/config.toml` and passes the same override on `codex exec`. This restores legacy shell execution using `bash`/`sh` already present in the runtime image.
 

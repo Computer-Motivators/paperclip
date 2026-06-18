@@ -3,6 +3,10 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import type { AdapterExecutionContext, AdapterExecutionResult } from "@paperclipai/adapter-utils";
+import { prepareAdapterVisionRun } from "@paperclipai/adapter-utils/adapter-vision-run";
+import { readAdapterVisionConfig } from "@paperclipai/adapter-utils/vision-config";
+import { renderAdapterVisionGuidance } from "@paperclipai/adapter-utils/vision-guidance";
+import { readStagedVisionImageBase64 } from "@paperclipai/adapter-utils/vision-images";
 import {
   asNumber,
   asString,
@@ -14,7 +18,7 @@ import {
   runChildProcess,
   DEFAULT_PAPERCLIP_AGENT_PROMPT_TEMPLATE,
 } from "@paperclipai/adapter-utils/server-utils";
-import { DEFAULT_DIRECT_OPENROUTER_MODEL } from "../index.js";
+import { DEFAULT_DIRECT_OPENROUTER_MODEL, models as directOpenRouterFallbackModels } from "../index.js";
 import { parseDirectOpenRouterJsonl } from "./parse.js";
 import { DIRECT_OPENROUTER_PYTHON_SCRIPT } from "./python-script.js";
 import {
@@ -47,8 +51,28 @@ function hashBundle(instructions: string, toolMode: string): string {
   return crypto.createHash("sha256").update(`${toolMode}\n${instructions}`).digest("hex");
 }
 
+async function buildMultimodalUserContent(
+  runPrompt: string,
+  staged: Awaited<ReturnType<typeof prepareAdapterVisionRun>>["staged"],
+): Promise<string | Array<Record<string, unknown>>> {
+  if (staged.length === 0) return runPrompt;
+  const parts: Array<Record<string, unknown>> = [{ type: "text", text: runPrompt }];
+  for (const image of staged) {
+    const base64 = await readStagedVisionImageBase64(image.localPath);
+    parts.push({
+      type: "image_url",
+      image_url: { url: `data:${image.mimeType};base64,${base64}` },
+    });
+  }
+  return parts;
+}
+
+function wakePromptWillExist(context: Record<string, unknown>): boolean {
+  return renderPaperclipWakePrompt(context.paperclipWake).length > 0;
+}
+
 export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExecutionResult> {
-  const { runId, agent, runtime, config, context, onLog } = ctx;
+  const { runId, agent, runtime, config, context, onLog, onMeta, authToken } = ctx;
   const cwd = asString(config.cwd, process.cwd());
   const model = asString(config.model, DEFAULT_DIRECT_OPENROUTER_MODEL).trim();
   const toolCallingMode = asString(config.toolCallingMode, "native") === "text" ? "text" : "native";
@@ -64,6 +88,7 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const instructionsFilePath = asString(config.instructionsFilePath, "");
   const workspaceContext = parseObject(context.paperclipWorkspace);
   const workspaceRoot = asString(workspaceContext.cwd, cwd) || cwd;
+  const visionConfig = readAdapterVisionConfig(config);
 
   const envConfig = parseObject(config.env) ?? {};
   const adapterEnv = readResolvedEnv(envConfig);
@@ -75,11 +100,6 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const issueId = asString(context.issueId, "").trim();
   const sessionSeed = runtime.sessionId ?? (issueId ? `issue:${issueId}` : `run:${runId}`);
   const sessionId = `pc:${agent.companyId}:${agent.id}:${sessionSeed}`.slice(0, 128);
-  const wakePrompt = renderPaperclipWakePrompt(context.paperclipWake);
-  const runPrompt = joinPromptSections([
-    renderTemplate(promptTemplate, context),
-    wakePrompt,
-  ]);
 
   let instructionsContents = "";
   if (instructionsFilePath) {
@@ -94,11 +114,48 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
   const priorMessages = Array.isArray(prior.messages) ? prior.messages : [];
   const bundleKey = hashBundle(instructionsContents, toolCallingMode);
   const shouldResume = asString(prior.bundleKey, "") === bundleKey;
+  const shouldUseResumeDeltaPrompt = shouldResume && wakePromptWillExist(context);
+  const wakePrompt = renderPaperclipWakePrompt(context.paperclipWake, {
+    resumedSession: shouldUseResumeDeltaPrompt,
+  });
+  const runPrompt = joinPromptSections([
+    renderTemplate(promptTemplate, context),
+    wakePrompt,
+  ]);
   const messages = shouldResume ? [...priorMessages] : [];
   if (!shouldResume && instructionsContents.trim()) {
     messages.push({ role: "system", content: instructionsContents.trim() });
   }
-  messages.push({ role: "user", content: runPrompt });
+
+  const visionRun = await prepareAdapterVisionRun({
+    config,
+    context,
+    runId,
+    cwd: workspaceRoot,
+    workspaceRoot,
+    modelId: model,
+    apiUrl: effectiveEnv.PAPERCLIP_API_URL,
+    apiKey: authToken ?? effectiveEnv.PAPERCLIP_API_KEY,
+    openRouterApiKey: apiKey,
+    provider: "openrouter",
+    fallbackModels: directOpenRouterFallbackModels,
+    isResumeDelta: shouldUseResumeDeltaPrompt,
+  });
+  for (const note of visionRun.notes) {
+    await onLog("stdout", `[paperclip] ${note}\n`);
+  }
+
+  const visionGuidance = renderAdapterVisionGuidance({
+    adapterKind: "direct_openrouter",
+    modelSupportsImageInput: visionRun.modelSupportsImageInput,
+  });
+  if (visionGuidance) {
+    messages.push({ role: "system", content: visionGuidance });
+  }
+
+  const userPrompt = shouldUseResumeDeltaPrompt ? wakePrompt : runPrompt;
+  const userContent = await buildMultimodalUserContent(userPrompt, visionRun.staged);
+  messages.push({ role: "user", content: userContent });
 
   const trace = {
     trace_id: `pc:${agent.companyId}:${agent.id}:${issueId || runId}`.slice(0, 128),
@@ -119,6 +176,11 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     toolCallingMode,
     maxTurns,
     shellTimeoutSec,
+    maxVisionImageBytes: visionConfig.maxVisionImageBytes,
+    supportsImageInput: visionRun.modelSupportsImageInput,
+    runId,
+    paperclipApiUrl: effectiveEnv.PAPERCLIP_API_URL,
+    paperclipApiKey: authToken ?? effectiveEnv.PAPERCLIP_API_KEY,
     workspaceRoot,
     sessionId,
     httpReferer,
@@ -141,6 +203,19 @@ export async function execute(ctx: AdapterExecutionContext): Promise<AdapterExec
     },
     shellEnv,
   };
+
+  if (onMeta) {
+    await onMeta({
+      adapterType: "direct_openrouter_local",
+      command: asString(config.command, "python3"),
+      cwd: workspaceRoot,
+      prompt: typeof userContent === "string" ? userContent : userPrompt,
+      context,
+      visionImagesStaged: visionRun.staged.length,
+      visionImagesSkipped: visionRun.skipped.length,
+      modelSupportsImageInput: visionRun.modelSupportsImageInput,
+    });
+  }
 
   const scriptPath = path.join(
     await fs.mkdtemp(path.join(os.tmpdir(), "paperclip-direct-openrouter-")),

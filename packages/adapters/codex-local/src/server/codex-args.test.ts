@@ -126,4 +126,45 @@ describe("buildCodexExecArgs", () => {
       "-",
     ]);
   });
+
+  it("passes --image paths before stdin placeholder", () => {
+    const result = buildCodexExecArgs(
+      { model: "gpt-5.4" },
+      { imagePaths: ["/tmp/a.png", "/tmp/b.jpg"] },
+    );
+
+    expect(result.args).toEqual([
+      "exec",
+      "--json",
+      "--model",
+      "gpt-5.4",
+      "--image",
+      "/tmp/a.png",
+      "--image",
+      "/tmp/b.jpg",
+      "-",
+    ]);
+  });
+
+  it("places resume before --image flags", () => {
+    const result = buildCodexExecArgs(
+      { model: "gpt-5.4" },
+      {
+        resumeSessionId: "session-123",
+        imagePaths: ["/tmp/a.png"],
+      },
+    );
+
+    expect(result.args).toEqual([
+      "exec",
+      "--json",
+      "--model",
+      "gpt-5.4",
+      "resume",
+      "session-123",
+      "--image",
+      "/tmp/a.png",
+      "-",
+    ]);
+  });
 });

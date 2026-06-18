@@ -397,6 +397,16 @@ export {
 } from "./workspace-file-resource.js";
 
 export {
+  paperclipVisionImageRefSchema,
+  paperclipVisionImageRefListSchema,
+  paperclipVisionImageSourceSchema,
+  paperclipVisionQueueEntrySchema,
+  paperclipVisionQueueManifestSchema,
+  type PaperclipVisionImageRefInput,
+  type PaperclipVisionQueueManifestInput,
+} from "./vision-image.js";
+
+export {
   createGoalSchema,
   updateGoalSchema,
   type CreateGoal,

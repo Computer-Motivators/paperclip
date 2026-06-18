@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
+import base64
 import json
+import mimetypes
 import os
 import re
 import subprocess
@@ -22,10 +24,120 @@ def resolve_path(root, requested):
         return full
     raise RuntimeError("path escapes workspace root")
 
+def guess_image_mime(path):
+    mime, _ = mimetypes.guess_type(str(path))
+    if mime and mime.startswith("image/"):
+        return mime
+    ext = path.suffix.lower()
+    if ext in {".jpg", ".jpeg"}:
+        return "image/jpeg"
+    if ext == ".webp":
+        return "image/webp"
+    if ext == ".gif":
+        return "image/gif"
+    return "image/png"
+
 def tool_read_file(args, root):
     p = resolve_path(root, args.get("path", ""))
     data = p.read_text(encoding="utf-8")
     return data[:1024 * 1024]
+
+def tool_read_image(args, root, max_bytes, run_id, paperclip_api_url, paperclip_api_key):
+    attachment_id = str(args.get("attachmentId", "") or "").strip()
+    if attachment_id:
+        if not paperclip_api_url or not paperclip_api_key:
+            return {"error": "read_image attachmentId requires Paperclip API credentials"}
+        try:
+            data, mime = fetch_paperclip_attachment(paperclip_api_url, paperclip_api_key, attachment_id)
+        except Exception as err:
+            return {"error": f"attachment fetch failed: {err}"}
+        if len(data) > max_bytes:
+            return {"error": f"image exceeds max size ({max_bytes} bytes)"}
+        if not mime.startswith("image/"):
+            return {"error": f"attachment is not an image ({mime})"}
+        staging_dir = Path(root) / ".paperclip" / "vision-staging" / (run_id or "midrun")
+        staging_dir.mkdir(parents=True, exist_ok=True)
+        ext = ".png"
+        if "jpeg" in mime or "jpg" in mime:
+            ext = ".jpg"
+        elif "webp" in mime:
+            ext = ".webp"
+        elif "gif" in mime:
+            ext = ".gif"
+        staged_path = staging_dir / f"attachment-{attachment_id[:8]}{ext}"
+        staged_path.write_bytes(data)
+        encoded = base64.b64encode(data).decode("ascii")
+        return {
+            "path": str(staged_path.relative_to(root)) if str(staged_path).startswith(str(root)) else str(staged_path),
+            "attachment_id": attachment_id,
+            "mime_type": mime,
+            "byte_size": len(data),
+            "data_url": f"data:{mime};base64,{encoded}",
+        }
+
+    path_arg = str(args.get("path", "") or "").strip()
+    if not path_arg:
+        return {"error": "read_image requires path or attachmentId"}
+    p = resolve_path(root, path_arg)
+    data = p.read_bytes()
+    if len(data) > max_bytes:
+        return {"error": f"image exceeds max size ({max_bytes} bytes)"}
+    mime = guess_image_mime(p)
+    encoded = base64.b64encode(data).decode("ascii")
+    return {
+        "path": path_arg,
+        "mime_type": mime,
+        "byte_size": len(data),
+        "data_url": f"data:{mime};base64,{encoded}",
+    }
+
+def fetch_paperclip_attachment(api_url, api_key, attachment_id):
+    base = str(api_url).rstrip("/")
+    req = urllib.request.Request(
+        f"{base}/api/attachments/{attachment_id}/content",
+        headers={"Authorization": f"Bearer {api_key}"},
+    )
+    with urllib.request.urlopen(req, timeout=60) as resp:
+        content_type = resp.headers.get("Content-Type", "application/octet-stream").split(";")[0].strip()
+        return resp.read(), content_type or "application/octet-stream"
+
+IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".webp", ".gif"}
+SKIP_DIR_NAMES = {".git", "node_modules", ".paperclip", "dist", "build", ".venv", "venv", "__pycache__"}
+
+def tool_list_workspace_images(args, root):
+    max_depth = max(1, min(8, int(args.get("maxDepth", 4))))
+    max_results = max(1, min(50, int(args.get("maxResults", 20))))
+    rootp = Path(root).resolve()
+    found = []
+
+    def walk(current, depth):
+        if depth > max_depth or len(found) >= max_results:
+            return
+        try:
+            entries = sorted(current.iterdir(), key=lambda p: p.name)
+        except OSError:
+            return
+        for entry in entries:
+            if len(found) >= max_results:
+                return
+            if entry.is_dir():
+                if entry.name in SKIP_DIR_NAMES:
+                    continue
+                walk(entry, depth + 1)
+                continue
+            if entry.suffix.lower() not in IMAGE_EXTENSIONS:
+                continue
+            try:
+                rel = entry.relative_to(rootp)
+            except ValueError:
+                continue
+            found.append({
+                "path": str(rel).replace("\\", "/"),
+                "byte_size": entry.stat().st_size,
+            })
+
+    walk(rootp, 0)
+    return {"images": found, "count": len(found)}
 
 def tool_write_file(args, root):
     p = resolve_path(root, args.get("path", ""))
@@ -160,17 +272,55 @@ def openrouter_request(payload, api_key, session_id, referer, title):
     with urllib.request.urlopen(req, timeout=120) as resp:
         return json.loads(resp.read().decode("utf-8"))
 
-def tool_defs():
-    return [
+def tool_defs(supports_image_input):
+    tools = [
         {"type": "function", "function": {"name": "read_file", "description": "Read a text file from workspace", "parameters": {"type": "object", "properties": {"path": {"type": "string"}}, "required": ["path"]}}},
         {"type": "function", "function": {"name": "write_file", "description": "Write file content into workspace", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "content": {"type": "string"}}, "required": ["path", "content"]}}},
         {"type": "function", "function": {"name": "apply_patch", "description": "Apply one search-and-replace patch in a file", "parameters": {"type": "object", "properties": {"path": {"type": "string"}, "search": {"type": "string"}, "replace": {"type": "string"}}, "required": ["path", "search", "replace"]}}},
         {"type": "function", "function": {"name": "run_shell", "description": "Run a shell command in the workspace", "parameters": {"type": "object", "properties": {"command": {"type": "string"}}, "required": ["command"]}}},
     ]
+    if supports_image_input:
+        tools.insert(1, {
+            "type": "function",
+            "function": {
+                "name": "read_image",
+                "description": "Read an image from workspace path or Paperclip attachmentId and attach it as vision input",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "path": {"type": "string", "description": "Workspace-relative image path"},
+                        "attachmentId": {"type": "string", "description": "Paperclip issue attachment UUID"},
+                    },
+                },
+            },
+        })
+        tools.insert(2, {
+            "type": "function",
+            "function": {
+                "name": "list_workspace_images",
+                "description": "List image files recently present in the workspace (bounded scan)",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "maxDepth": {"type": "integer"},
+                        "maxResults": {"type": "integer"},
+                    },
+                },
+            },
+        })
+    return tools
 
-def apply_tool(name, args, root, shell_timeout, shell_policy, shell_env):
+def apply_tool(name, args, root, shell_timeout, shell_policy, shell_env, max_image_bytes, supports_image_input, run_id, paperclip_api_url, paperclip_api_key):
     if name == "read_file":
         return tool_read_file(args, root)
+    if name == "read_image":
+        if not supports_image_input:
+            return {"error": "read_image is unavailable because the selected model does not support image input"}
+        return tool_read_image(args, root, max_image_bytes, run_id, paperclip_api_url, paperclip_api_key)
+    if name == "list_workspace_images":
+        if not supports_image_input:
+            return {"error": "list_workspace_images is unavailable because the selected model does not support image input"}
+        return tool_list_workspace_images(args, root)
     if name == "write_file":
         return tool_write_file(args, root)
     if name == "apply_patch":
@@ -178,6 +328,30 @@ def apply_tool(name, args, root, shell_timeout, shell_policy, shell_env):
     if name == "run_shell":
         return tool_run_shell(args, root, shell_timeout, shell_policy, shell_env)
     return {"error": f"unknown tool {name}"}
+
+def sanitize_messages_for_storage(messages):
+    sanitized = []
+    for message in messages:
+        content = message.get("content")
+        if isinstance(content, list):
+            next_parts = []
+            for part in content:
+                if not isinstance(part, dict):
+                    continue
+                if part.get("type") == "image_url":
+                    next_parts.append({"type": "text", "text": "[omitted vision image]"})
+                    continue
+                next_parts.append(part)
+            sanitized.append({**message, "content": next_parts})
+            continue
+        sanitized.append(message)
+    return sanitized
+
+def append_assistant_message(messages, text, tool_calls):
+    assistant = {"role": "assistant", "content": text}
+    if tool_calls:
+        assistant["tool_calls"] = tool_calls
+    messages.append(assistant)
 
 def main():
     request = json.loads(sys.stdin.read() or "{}")
@@ -189,6 +363,7 @@ def main():
     mode = request.get("toolCallingMode", "native")
     max_turns = int(request.get("maxTurns", 25))
     shell_timeout = int(request.get("shellTimeoutSec", 120))
+    max_image_bytes = int(request.get("maxVisionImageBytes", 10 * 1024 * 1024))
     workspace_root = request.get("workspaceRoot") or os.getcwd()
     shell_policy = request.get("shellPolicy") or {"enabled": True, "preset": "dev"}
     shell_env = request.get("shellEnv") or {}
@@ -198,6 +373,10 @@ def main():
     user = request.get("user")
     trace = request.get("trace") or {}
     messages = request.get("messages") or []
+    supports_image_input = bool(request.get("supportsImageInput"))
+    run_id = str(request.get("runId") or "midrun")
+    paperclip_api_url = str(request.get("paperclipApiUrl") or "")
+    paperclip_api_key = str(request.get("paperclipApiKey") or "")
 
     if mode == "text":
         messages = list(messages)
@@ -221,7 +400,7 @@ def main():
         if model.startswith("anthropic/"):
             payload["cache_control"] = {"type": "ephemeral", "ttl": "1h"}
         if mode == "native":
-            payload["tools"] = tool_defs()
+            payload["tools"] = tool_defs(supports_image_input)
             payload["tool_choice"] = "auto"
 
         try:
@@ -252,7 +431,7 @@ def main():
             emit({"type": "assistant_message", "text": text})
             final_text = text
 
-        messages.append({"role": "assistant", "content": text})
+        append_assistant_message(messages, text, tool_calls if tool_calls else None)
 
         parsed_text_call = parse_text_tool_call(text) if mode == "text" else None
         if parsed_text_call and not tool_calls:
@@ -260,9 +439,18 @@ def main():
             args = parsed_text_call.get("arguments", {})
             if not isinstance(args, dict):
                 args = {}
-            result = apply_tool(name, args, workspace_root, shell_timeout, shell_policy, shell_env)
+            result = apply_tool(name, args, workspace_root, shell_timeout, shell_policy, shell_env, max_image_bytes, supports_image_input, run_id, paperclip_api_url, paperclip_api_key)
             emit({"type": "tool_result", "tool_name": name, "result": result})
-            messages.append({"role": "tool", "name": name, "content": stable_json(result)})
+            if name == "read_image" and isinstance(result, dict) and result.get("data_url"):
+                messages.append({
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": f"Image from {result.get('path', 'workspace')}:"},
+                        {"type": "image_url", "image_url": {"url": result.get("data_url")}},
+                    ],
+                })
+            else:
+                messages.append({"role": "tool", "name": name, "content": stable_json(result)})
             continue
 
         if tool_calls:
@@ -276,9 +464,23 @@ def main():
                     args = {}
                 if not isinstance(args, dict):
                     args = {}
-                result = apply_tool(name, args, workspace_root, shell_timeout, shell_policy, shell_env)
+                result = apply_tool(name, args, workspace_root, shell_timeout, shell_policy, shell_env, max_image_bytes, supports_image_input, run_id, paperclip_api_url, paperclip_api_key)
                 emit({"type": "tool_result", "tool_name": name, "result": result})
-                messages.append({"role": "tool", "tool_call_id": call.get("id"), "name": name, "content": stable_json(result)})
+                if name == "read_image" and isinstance(result, dict) and result.get("data_url"):
+                    messages.append({
+                        "role": "user",
+                        "content": [
+                            {"type": "text", "text": f"Image from {result.get('path', 'workspace')}:"},
+                            {"type": "image_url", "image_url": {"url": result.get("data_url")}},
+                        ],
+                    })
+                else:
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": call.get("id"),
+                        "name": name,
+                        "content": stable_json(result),
+                    })
             continue
 
         break
@@ -298,7 +500,7 @@ def main():
         "session_id": session_id,
         "session_params": {
             "sessionId": session_id,
-            "messages": messages[-30:],
+            "messages": sanitize_messages_for_storage(messages[-30:]),
         },
     })
 

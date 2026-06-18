@@ -1,5 +1,6 @@
 import type { AdapterModel } from "./types.js";
 import { models as codexFallbackModels } from "@paperclipai/adapter-codex-local";
+import { resolveOpenAiCodexImageInputSupport } from "@paperclipai/adapter-utils/model-vision-capabilities";
 import { readConfigFile } from "../config-file.js";
 
 const OPENAI_MODELS_ENDPOINT = "https://api.openai.com/v1/models";
@@ -12,23 +13,26 @@ function fingerprint(apiKey: string): string {
   return `${apiKey.length}:${apiKey.slice(-6)}`;
 }
 
-function dedupeModels(models: AdapterModel[]): AdapterModel[] {
-  const seen = new Set<string>();
-  const deduped: AdapterModel[] = [];
-  for (const model of models) {
-    const id = model.id.trim();
-    if (!id || seen.has(id)) continue;
-    seen.add(id);
-    deduped.push({ id, label: model.label.trim() || id });
-  }
-  return deduped;
+function annotateCodexModel(model: AdapterModel): AdapterModel {
+  const supportsImageInput = resolveOpenAiCodexImageInputSupport(model.id, codexFallbackModels);
+  return {
+    ...model,
+    supportsImageInput,
+    inputModalities: supportsImageInput ? ["text", "image"] : ["text"],
+  };
 }
 
-function mergedWithFallback(models: AdapterModel[]): AdapterModel[] {
-  return dedupeModels([
-    ...models,
-    ...codexFallbackModels,
-  ]).sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true, sensitivity: "base" }));
+function mergeWithFallback(models: AdapterModel[]): AdapterModel[] {
+  const seen = new Set<string>();
+  const deduped: AdapterModel[] = [];
+  for (const model of [...models, ...codexFallbackModels]) {
+    const annotated = annotateCodexModel(model);
+    const id = annotated.id.trim();
+    if (!id || seen.has(id)) continue;
+    seen.add(id);
+    deduped.push({ ...annotated, id, label: annotated.label.trim() || id });
+  }
+  return deduped.sort((a, b) => a.id.localeCompare(b.id, "en", { numeric: true, sensitivity: "base" }));
 }
 
 function resolveOpenAiApiKey(): string | null {
@@ -60,9 +64,9 @@ async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
       if (typeof item !== "object" || item === null) continue;
       const id = (item as { id?: unknown }).id;
       if (typeof id !== "string" || id.trim().length === 0) continue;
-      models.push({ id, label: id });
+      models.push(annotateCodexModel({ id, label: id }));
     }
-    return dedupeModels(models);
+    return models;
   } catch {
     return [];
   } finally {
@@ -73,7 +77,7 @@ async function fetchOpenAiModels(apiKey: string): Promise<AdapterModel[]> {
 async function loadCodexModels(options?: { forceRefresh?: boolean }): Promise<AdapterModel[]> {
   const forceRefresh = options?.forceRefresh === true;
   const apiKey = resolveOpenAiApiKey();
-  const fallback = dedupeModels(codexFallbackModels);
+  const fallback = mergeWithFallback([]);
   if (!apiKey) return fallback;
 
   const now = Date.now();
@@ -84,7 +88,7 @@ async function loadCodexModels(options?: { forceRefresh?: boolean }): Promise<Ad
 
   const fetched = await fetchOpenAiModels(apiKey);
   if (fetched.length > 0) {
-    const merged = mergedWithFallback(fetched);
+    const merged = mergeWithFallback(fetched);
     cached = {
       keyFingerprint,
       expiresAt: now + OPENAI_MODELS_CACHE_TTL_MS,

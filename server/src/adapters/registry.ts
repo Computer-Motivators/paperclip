@@ -140,6 +140,10 @@ import {
   listCodexOpenRouterModels,
   refreshCodexOpenRouterModels,
 } from "./codex-openrouter-models.js";
+import {
+  listDirectOpenRouterModels,
+  refreshDirectOpenRouterModels,
+} from "./direct-openrouter-models.js";
 import { listCursorModels } from "./cursor-models.js";
 import {
   execute as piExecute,
@@ -365,6 +369,8 @@ const directOpenRouterLocalAdapter: ServerAdapterModule = {
   sessionManagement: getAdapterSessionManagement("direct_openrouter_local") ?? undefined,
   models: directOpenRouterModels,
   modelProfiles: directOpenRouterModelProfiles,
+  listModels: listDirectOpenRouterModels,
+  refreshModels: refreshDirectOpenRouterModels,
   supportsLocalAgentJwt: true,
   supportsInstructionsBundle: true,
   instructionsPathKey: "instructionsFilePath",

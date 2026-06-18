@@ -4,6 +4,23 @@ export type CompanyStatus = (typeof COMPANY_STATUSES)[number];
 export const DEFAULT_COMPANY_ATTACHMENT_MAX_BYTES = 10 * 1024 * 1024;
 export const MAX_COMPANY_ATTACHMENT_MAX_BYTES = 1024 * 1024 * 1024;
 
+export const ADAPTER_VISION_MODES = ["auto", "off"] as const;
+export type AdapterVisionMode = (typeof ADAPTER_VISION_MODES)[number];
+export const DEFAULT_ADAPTER_VISION_MODE: AdapterVisionMode = "auto";
+export const DEFAULT_ADAPTER_MAX_VISION_IMAGES = 8;
+export const DEFAULT_ADAPTER_MAX_VISION_IMAGE_BYTES = 10 * 1024 * 1024;
+export const ADAPTER_VISION_IMAGE_MIME_TYPES = [
+  "image/png",
+  "image/jpeg",
+  "image/jpg",
+  "image/webp",
+  "image/gif",
+] as const;
+export const PAPERCLIP_VISION_IMAGES_CONTEXT_KEY = "paperclipVisionImages";
+export const PAPERCLIP_VISION_QUEUE_RELATIVE_PATH = ".paperclip/vision-queue.json";
+export const DEFAULT_ADAPTER_VISION_ATTACH_ON_RESUME = true;
+export const DEFAULT_ADAPTER_VISION_SUPPLEMENTAL_RESUME = true;
+
 export const DEPLOYMENT_MODES = ["local_trusted", "authenticated"] as const;
 export type DeploymentMode = (typeof DEPLOYMENT_MODES)[number];
 

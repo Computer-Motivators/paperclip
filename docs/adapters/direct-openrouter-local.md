@@ -41,6 +41,13 @@ The `direct_openrouter_local` adapter runs a lightweight Python agent loop that 
 - `timeoutSec` / `graceSec`: adapter process timeout controls
 - `httpReferer` / `openRouterTitle`: OpenRouter attribution headers
 - `traceName` / `traceEnvironment`: trace metadata overrides
+- `visionMode`: `auto` (default) or `off`
+- `visionAttachOnResume`: attach vision images on resumed session wake deltas (default `true`)
+- `maxVisionImages` / `maxVisionImageBytes`: caps for run-start vision staging
+
+## Vision input
+
+When `visionMode` is `auto` and the selected OpenRouter model supports image input, Paperclip attaches discovered issue images as multimodal `image_url` parts on the initial user message. During the run, the `read_image` tool loads workspace files or Paperclip attachment IDs as vision tokens (not UTF-8 text). Use `list_workspace_images` to discover downloaded images. Session persistence omits inline base64 blobs from stored messages. See `skills/paperclip/references/vision.md`.
 
 ## OpenRouter Broadcast protocol
 

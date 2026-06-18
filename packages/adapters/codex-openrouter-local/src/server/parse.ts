@@ -85,6 +85,11 @@ export function parseCodexJsonl(stdout: string) {
   };
 }
 
+export function isCodexImageProcessingError(stdout: string, stderr: string): boolean {
+  const haystack = `${stdout}\n${stderr}`.toLowerCase();
+  return /could not process image|image.*(?:unsupported|invalid|failed)|unsupported image/i.test(haystack);
+}
+
 export function isCodexUnknownSessionError(stdout: string, stderr: string): boolean {
   const haystack = `${stdout}\n${stderr}`
     .split(/\r?\n/)

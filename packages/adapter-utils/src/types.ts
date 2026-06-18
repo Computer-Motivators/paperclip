@@ -117,6 +117,9 @@ export interface AdapterInvocationMeta {
   prompt?: string;
   promptMetrics?: Record<string, number>;
   context?: Record<string, unknown>;
+  visionImagesStaged?: number;
+  visionImagesSkipped?: number;
+  modelSupportsImageInput?: boolean;
 }
 
 export interface AdapterExecutionContext {
@@ -143,6 +146,8 @@ export interface AdapterExecutionContext {
 export interface AdapterModel {
   id: string;
   label: string;
+  supportsImageInput?: boolean;
+  inputModalities?: string[];
 }
 
 export type AdapterModelProfileKey = "cheap";

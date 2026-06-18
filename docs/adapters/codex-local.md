@@ -22,6 +22,17 @@ The `codex_local` adapter runs OpenAI's Codex CLI locally. It supports session p
 | `graceSec` | number | No | Grace period before force-kill |
 | `fastMode` | boolean | No | Enables Codex Fast mode. Currently supported on `gpt-5.4` only and burns credits faster |
 | `dangerouslyBypassApprovalsAndSandbox` | boolean | No | Skip safety checks (dev only) |
+| `visionMode` | string | No | `auto` (default) or `off` |
+| `visionAttachOnResume` | boolean | No | Attach vision images on resumed session wake deltas (default `true`) |
+| `visionSupplementalResume` | boolean | No | Chain supplemental `codex exec resume --image` when `.paperclip/vision-queue.json` is non-empty (default `true`) |
+| `maxVisionImages` | number | No | Max images attached per run (default 8) |
+| `maxVisionImageBytes` | number | No | Max bytes per staged image (default 10 MiB) |
+
+## Vision input
+
+When `visionMode` is `auto`, Paperclip stages issue image attachments and passes them to Codex via `codex exec --image` when the configured model is heuristically vision-capable (Codex/GPT-5/o-series families). Images are never embedded as raw bytes in the stdin prompt.
+
+For mid-run images (downloads, skill output), append paths or attachment IDs to `.paperclip/vision-queue.json` in the workspace. Paperclip may chain one supplemental vision resume in the same heartbeat when `visionSupplementalResume` is enabled. See `skills/paperclip/references/vision.md`.
 
 ## Session Persistence
 

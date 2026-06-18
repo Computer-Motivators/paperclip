@@ -38,17 +38,17 @@ export function isCodexLocalFastModeSupported(model: string | null | undefined):
 }
 
 export const models = [
-  { id: "gpt-5.5", label: "gpt-5.5" },
-  { id: "gpt-5.4", label: "gpt-5.4" },
-  { id: DEFAULT_CODEX_LOCAL_MODEL, label: DEFAULT_CODEX_LOCAL_MODEL },
-  { id: "gpt-5.3-codex-spark", label: "gpt-5.3-codex-spark" },
-  { id: "gpt-5", label: "gpt-5" },
-  { id: "o3", label: "o3" },
-  { id: "o4-mini", label: "o4-mini" },
-  { id: "gpt-5-mini", label: "gpt-5-mini" },
-  { id: "gpt-5-nano", label: "gpt-5-nano" },
-  { id: "o3-mini", label: "o3-mini" },
-  { id: "codex-mini-latest", label: "Codex Mini" },
+  { id: "gpt-5.5", label: "gpt-5.5", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "gpt-5.4", label: "gpt-5.4", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: DEFAULT_CODEX_LOCAL_MODEL, label: DEFAULT_CODEX_LOCAL_MODEL, supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "gpt-5.3-codex-spark", label: "gpt-5.3-codex-spark", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "gpt-5", label: "gpt-5", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "o3", label: "o3", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "o4-mini", label: "o4-mini", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "gpt-5-mini", label: "gpt-5-mini", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "gpt-5-nano", label: "gpt-5-nano", supportsImageInput: false, inputModalities: ["text"] },
+  { id: "o3-mini", label: "o3-mini", supportsImageInput: true, inputModalities: ["text", "image"] },
+  { id: "codex-mini-latest", label: "Codex Mini", supportsImageInput: true, inputModalities: ["text", "image"] },
 ];
 
 export const modelProfiles: AdapterModelProfileDefinition[] = [
@@ -87,6 +87,9 @@ Core fields:
 Operational fields:
 - timeoutSec (number, optional): run timeout in seconds
 - graceSec (number, optional): SIGTERM grace period in seconds
+- visionMode (string, optional): auto (default) or off
+- maxVisionImages (number, optional): max images attached per run (default 8)
+- maxVisionImageBytes (number, optional): max bytes per staged image (default 10 MiB)
 
 Notes:
 - Prompts are piped via stdin (Codex receives "-" prompt argument).
@@ -97,4 +100,5 @@ Notes:
 - Some model/tool combinations reject certain effort levels (for example minimal with web search enabled).
 - Fast mode is supported on GPT-5.5, GPT-5.4 and manual model IDs. When enabled for those models, Paperclip applies \`service_tier="fast"\` and \`features.fast_mode=true\`.
 - When Paperclip realizes a workspace/runtime for a run, it injects PAPERCLIP_WORKSPACE_* and PAPERCLIP_RUNTIME_* env vars for agent-side tooling.
+- Vision: when visionMode=auto, issue image attachments are staged locally and passed via codex exec --image when the model is vision-capable. Queue mid-run images in .paperclip/vision-queue.json for supplemental resume in the same heartbeat.
 `;

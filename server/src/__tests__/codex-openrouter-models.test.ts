@@ -19,7 +19,10 @@ describe("codex openrouter model listing", () => {
     const fetchSpy = vi.spyOn(globalThis, "fetch");
     const models = await listCodexOpenRouterModels();
 
-    expect(models).toEqual(codexOpenRouterFallbackModels);
+    expect(models).toHaveLength(codexOpenRouterFallbackModels.length);
+    for (const fallback of codexOpenRouterFallbackModels) {
+      expect(models).toContainEqual(fallback);
+    }
     expect(fetchSpy).not.toHaveBeenCalled();
   });
 
@@ -29,8 +32,8 @@ describe("codex openrouter model listing", () => {
       ok: true,
       json: async () => ({
         data: [
-          { id: "openai/gpt-5.3-codex", name: "GPT-5.3 Codex" },
-          { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4" },
+          { id: "openai/gpt-5.3-codex", name: "GPT-5.3 Codex", architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] } },
+          { id: "anthropic/claude-sonnet-4", name: "Claude Sonnet 4", architecture: { input_modalities: ["text", "image"], output_modalities: ["text"] } },
         ],
       }),
     } as Response);
@@ -43,5 +46,6 @@ describe("codex openrouter model listing", () => {
     expect(first.some((model) => model.id === "openai/gpt-5.3-codex")).toBe(true);
     expect(first.some((model) => model.id === DEFAULT_CODEX_OPENROUTER_LOCAL_MODEL)).toBe(true);
     expect(first.some((model) => model.id === "anthropic/claude-sonnet-4")).toBe(false);
+    expect(first.find((model) => model.id === "openai/gpt-5.3-codex")?.supportsImageInput).toBe(true);
   });
 });

@@ -74,6 +74,7 @@ V1 implementation extends this baseline into a company-centric, governance-aware
 - Budget settings and hard-stop enforcement
 - Board web UI for dashboard, org chart, tasks, agents, approvals, costs
 - Agent-facing API contract (task read/write, heartbeat report, cost report)
+- Vision-capable adapters (`codex_local`, `codex_openrouter_local`, `direct_openrouter_local`) may attach issue image attachments as model vision input when `visionMode=auto` and the configured model supports image modality; images are staged locally and never embedded as raw bytes in text prompts. Mid-run vision uses `.paperclip/vision-queue.json` (Codex supplemental resume) or the `read_image` tool (`direct_openrouter_local`).
 - Auditable activity log for all mutating actions
 
 ## 5.2 Out of Scope (V1)
