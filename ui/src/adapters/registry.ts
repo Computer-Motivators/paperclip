@@ -4,6 +4,7 @@ import { claudeLocalUIAdapter } from "./claude-local";
 import { codexLocalUIAdapter } from "./codex-local";
 import { codexOpenRouterLocalUIAdapter } from "./codex-openrouter-local";
 import { directOpenRouterLocalUIAdapter } from "./direct-openrouter-local";
+import { insideOutWebhookUIAdapter } from "./inside-out-webhook";
 import { cursorCloudUIAdapter } from "./cursor-cloud";
 import { cursorLocalUIAdapter } from "./cursor";
 import { geminiLocalUIAdapter } from "./gemini-local";
@@ -59,6 +60,7 @@ function registerBuiltInUIAdapters() {
     codexLocalUIAdapter,
     codexOpenRouterLocalUIAdapter,
     directOpenRouterLocalUIAdapter,
+    insideOutWebhookUIAdapter,
     cursorCloudUIAdapter,
     geminiLocalUIAdapter,
     grokLocalUIAdapter,

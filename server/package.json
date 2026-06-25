@@ -49,6 +49,7 @@
     "@paperclipai/adapter-codex-local": "workspace:*",
     "@computermotivators/adapter-codex-openrouter-local": "workspace:*",
     "@computermotivators/adapter-direct-openrouter-local": "workspace:*",
+    "@computermotivators/adapter-inside-out-webhook": "workspace:*",
     "@paperclipai/adapter-cursor-cloud": "workspace:*",
     "@paperclipai/adapter-cursor-local": "workspace:*",
     "@paperclipai/adapter-gemini-local": "workspace:*",

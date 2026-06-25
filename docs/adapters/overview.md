@@ -28,6 +28,7 @@ When a heartbeat fires, Paperclip:
 | OpenClaw Gateway | `openclaw_gateway` | Connects to an OpenClaw gateway endpoint |
 | [Process](/adapters/process) | `process` | Executes arbitrary shell commands |
 | [HTTP](/adapters/http) | `http` | Sends webhooks to external agents |
+| [Inside-Out Webhook](/adapters/inside-out-webhook) | `inside_out_webhook` | External agents pull queued work from Paperclip |
 
 ### External (plugin) adapters
 

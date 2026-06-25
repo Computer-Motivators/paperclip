@@ -73,6 +73,15 @@ import {
   modelProfiles as directOpenRouterModelProfiles,
 } from "@computermotivators/adapter-direct-openrouter-local";
 import {
+  execute as insideOutWebhookExecute,
+  sessionCodec as insideOutWebhookSessionCodec,
+  testEnvironment as insideOutWebhookTestEnvironment,
+  getConfigSchema as getInsideOutWebhookConfigSchema,
+} from "@computermotivators/adapter-inside-out-webhook/server";
+import {
+  agentConfigurationDoc as insideOutWebhookAgentConfigurationDoc,
+} from "@computermotivators/adapter-inside-out-webhook";
+import {
   execute as cursorExecute,
   listCursorSkills,
   syncCursorSkills,
@@ -384,6 +393,19 @@ const directOpenRouterLocalAdapter: ServerAdapterModule = {
   getConfigSchema: getDirectOpenRouterConfigSchema,
 };
 
+const insideOutWebhookAdapter: ServerAdapterModule = {
+  type: "inside_out_webhook",
+  execute: insideOutWebhookExecute,
+  testEnvironment: insideOutWebhookTestEnvironment,
+  sessionCodec: insideOutWebhookSessionCodec,
+  models: [],
+  supportsLocalAgentJwt: false,
+  supportsInstructionsBundle: true,
+  requiresMaterializedRuntimeSkills: false,
+  agentConfigurationDoc: insideOutWebhookAgentConfigurationDoc,
+  getConfigSchema: getInsideOutWebhookConfigSchema,
+};
+
 const cursorLocalAdapter: ServerAdapterModule = {
   type: "cursor",
   execute: cursorExecute,
@@ -592,6 +614,7 @@ function registerBuiltInAdapters() {
     codexLocalAdapter,
     codexOpenRouterLocalAdapter,
     directOpenRouterLocalAdapter,
+    insideOutWebhookAdapter,
     openCodeLocalAdapter,
     piLocalAdapter,
     cursorCloudAdapter,

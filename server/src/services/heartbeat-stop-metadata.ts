@@ -65,6 +65,19 @@ export function resolveHeartbeatRunTimeoutPolicy(
     };
   }
 
+  if (adapterType === "inside_out_webhook") {
+    const hasQueueTimeout = hasOwn(config, "queueTimeoutSec");
+    const rawQueueTimeout = hasQueueTimeout
+      ? readFiniteNumber(config.queueTimeoutSec)
+      : 86_400;
+    const queueTimeoutSec = Math.max(0, Math.floor(rawQueueTimeout ?? 86_400));
+    return {
+      effectiveTimeoutSec: queueTimeoutSec,
+      timeoutConfigured: queueTimeoutSec > 0,
+      timeoutSource: hasQueueTimeout ? "config" : "default",
+    };
+  }
+
   const hasTimeoutSec = hasOwn(config, "timeoutSec");
   const defaultTimeoutSec = defaultTimeoutSecForAdapter(adapterType);
   const rawTimeoutSec = hasTimeoutSec ? readFiniteNumber(config.timeoutSec) : defaultTimeoutSec;

@@ -43,6 +43,9 @@ importers:
       '@computermotivators/adapter-direct-openrouter-local':
         specifier: workspace:*
         version: link:../packages/adapters/direct-openrouter-local
+      '@computermotivators/adapter-inside-out-webhook':
+        specifier: workspace:*
+        version: link:../packages/adapters/inside-out-webhook
       '@paperclipai/adapter-acpx-local':
         specifier: workspace:*
         version: link:../packages/adapters/acpx-local
@@ -282,6 +285,28 @@ importers:
       typescript:
         specifier: ^5.7.3
         version: 5.9.3
+
+  packages/adapters/inside-out-webhook:
+    dependencies:
+      '@paperclipai/adapter-utils':
+        specifier: workspace:*
+        version: link:../../adapter-utils
+      '@paperclipai/shared':
+        specifier: workspace:*
+        version: link:../../shared
+      picocolors:
+        specifier: ^1.1.1
+        version: 1.1.1
+    devDependencies:
+      '@types/node':
+        specifier: ^24.6.0
+        version: 24.12.0
+      typescript:
+        specifier: ^5.7.3
+        version: 5.9.3
+      vitest:
+        specifier: ^3.0.5
+        version: 3.2.4(@types/debug@4.1.12)(@types/node@24.12.0)(jiti@2.7.0)(jsdom@28.1.0(@noble/hashes@2.0.1))(lightningcss@1.32.0)(tsx@4.21.0)
 
   packages/adapters/openclaw-gateway:
     dependencies:
@@ -693,6 +718,9 @@ importers:
       '@computermotivators/adapter-direct-openrouter-local':
         specifier: workspace:*
         version: link:../packages/adapters/direct-openrouter-local
+      '@computermotivators/adapter-inside-out-webhook':
+        specifier: workspace:*
+        version: link:../packages/adapters/inside-out-webhook
       '@paperclipai/adapter-acpx-local':
         specifier: workspace:*
         version: link:../packages/adapters/acpx-local
@@ -850,6 +878,9 @@ importers:
       '@computermotivators/adapter-direct-openrouter-local':
         specifier: workspace:*
         version: link:../packages/adapters/direct-openrouter-local
+      '@computermotivators/adapter-inside-out-webhook':
+        specifier: workspace:*
+        version: link:../packages/adapters/inside-out-webhook
       '@dnd-kit/core':
         specifier: ^6.3.1
         version: 6.3.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)

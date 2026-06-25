@@ -133,6 +133,11 @@ const adapterDisplayMap: Record<string, AdapterDisplayInfo> = {
     icon: Cpu,
     comingSoon: true,
   },
+  inside_out_webhook: {
+    label: "Inside-Out Webhook",
+    description: "External agents pull queued work from Paperclip",
+    icon: Terminal,
+  },
 };
 
 // ---------------------------------------------------------------------------

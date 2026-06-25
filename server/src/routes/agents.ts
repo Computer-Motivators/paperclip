@@ -50,6 +50,7 @@ import {
   syncInstructionsBundleConfigFromFilePath,
   workspaceOperationService,
 } from "../services/index.js";
+import { ensureInsideOutAdapterConfig } from "../services/inside-out.js";
 import { conflict, forbidden, notFound, unprocessable } from "../errors.js";
 import { assertBoard, assertCompanyAccess, assertInstanceAdmin, getActorInfo } from "./authz.js";
 import {
@@ -1190,6 +1191,9 @@ export function agentRoutes(
     }
     if (adapterType === "cursor" && !asNonEmptyString(next.model)) {
       next.model = DEFAULT_CURSOR_LOCAL_MODEL;
+    }
+    if (adapterType === "inside_out_webhook") {
+      return ensureInsideOutAdapterConfig(next);
     }
     return ensureGatewayDeviceKey(adapterType, next);
   }

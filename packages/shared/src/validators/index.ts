@@ -582,3 +582,14 @@ export {
   type SetPluginState,
   type ListPluginState,
 } from "./plugin.js";
+
+export {
+  insideOutClaimStatusSchema,
+  insideOutCompletionOutcomeSchema,
+  insideOutLeaseExpiryPolicySchema,
+  insideOutPullSchema,
+  insideOutHeartbeatSchema,
+  insideOutCompleteSchema,
+  insideOutReleaseSchema,
+  insideOutProtocolVersionSchema,
+} from "./inside-out.js";

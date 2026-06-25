@@ -31,6 +31,8 @@ import {
 } from "@paperclipai/db";
 import detectPort from "detect-port";
 import { createApp } from "./app.js";
+import { bootstrapInsideOutAdapter } from "./adapters/inside-out-bootstrap.js";
+import { insideOutService } from "./services/inside-out.js";
 import { loadConfig } from "./config.js";
 import { logger } from "./middleware/logger.js";
 import { createIntervalGuard } from "./lib/interval-guard.js";
@@ -583,6 +585,7 @@ export async function startServer(): Promise<StartedServer> {
   const feedback = feedbackService(db as any, {
     shareClient: createFeedbackTraceShareClientFromConfig(config),
   });
+  bootstrapInsideOutAdapter(db as any);
   const backupSettingsSvc = instanceSettingsService(db);
   let databaseBackupInFlight = false;
   const runServerDatabaseBackup = async (
@@ -756,6 +759,7 @@ export async function startServer(): Promise<StartedServer> {
 
   if (config.heartbeatSchedulerEnabled) {
     const heartbeat = heartbeatService(db as any, { pluginWorkerManager });
+    const insideOut = insideOutService(db as any);
     const routines = routineService(db as any, { pluginWorkerManager });
     const heartbeatTickGuard = createIntervalGuard("heartbeat-tick");
     const routineTickGuard = createIntervalGuard("routine-tick");
@@ -817,6 +821,11 @@ export async function startServer(): Promise<StartedServer> {
       const swept = await heartbeat.sweepStaleIssueLocks();
       if (swept.cleared > 0) {
         logger.warn({ ...swept }, "startup stale-lock sweeper cleared issue locks");
+      }
+
+      const insideOutSwept = await insideOut.sweepExpiredLeases();
+      if (insideOutSwept.requeued > 0 || insideOutSwept.failed > 0) {
+        logger.warn({ ...insideOutSwept }, "startup inside-out lease sweeper processed expired claims");
       }
 
       const reviewed = await heartbeat.reconcileProductivityReviews();
@@ -882,6 +891,11 @@ export async function startServer(): Promise<StartedServer> {
         const swept = await heartbeat.sweepStaleIssueLocks();
         if (swept.cleared > 0) {
           logger.warn({ ...swept }, "periodic stale-lock sweeper cleared issue locks");
+        }
+
+        const insideOutSwept = await insideOut.sweepExpiredLeases();
+        if (insideOutSwept.requeued > 0 || insideOutSwept.failed > 0) {
+          logger.warn({ ...insideOutSwept }, "periodic inside-out lease sweeper processed expired claims");
         }
 
         const reviewed = await heartbeat.reconcileProductivityReviews();

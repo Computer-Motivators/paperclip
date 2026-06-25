@@ -51,6 +51,8 @@ export const AGENT_ADAPTER_TYPES = [
   "claude_local",
   "codex_local",
   "codex_openrouter_local",
+  "direct_openrouter_local",
+  "inside_out_webhook",
   "cursor_cloud",
   "gemini_local",
   "opencode_local",
@@ -669,6 +671,29 @@ export const HEARTBEAT_RUN_STATUSES = [
   "timed_out",
 ] as const;
 export type HeartbeatRunStatus = (typeof HEARTBEAT_RUN_STATUSES)[number];
+
+export const INSIDE_OUT_PROTOCOL_VERSION = "inside-out/v1" as const;
+
+export const INSIDE_OUT_CLAIM_STATUSES = [
+  "awaiting_pickup",
+  "claimed",
+  "completed",
+  "released",
+  "expired",
+] as const;
+export type InsideOutClaimStatus = (typeof INSIDE_OUT_CLAIM_STATUSES)[number];
+
+export const INSIDE_OUT_COMPLETION_OUTCOMES = ["succeeded", "failed"] as const;
+export type InsideOutCompletionOutcome = (typeof INSIDE_OUT_COMPLETION_OUTCOMES)[number];
+
+export const INSIDE_OUT_LEASE_EXPIRY_POLICIES = ["requeue", "fail"] as const;
+export type InsideOutLeaseExpiryPolicy = (typeof INSIDE_OUT_LEASE_EXPIRY_POLICIES)[number];
+
+export const INSIDE_OUT_DEFAULT_QUEUE_TIMEOUT_SEC = 86_400;
+export const INSIDE_OUT_DEFAULT_WORK_LEASE_SEC = 3600;
+export const INSIDE_OUT_DEFAULT_MAX_LEASE_SEC = 14_400;
+export const INSIDE_OUT_DEFAULT_HEARTBEAT_INTERVAL_SEC = 300;
+export const INSIDE_OUT_DEFAULT_MAX_REQUEUE_ATTEMPTS = 2;
 
 export const RUN_LIVENESS_STATES = [
   "completed",

@@ -7,6 +7,7 @@ export const BUILTIN_ADAPTER_TYPES = new Set([
   "codex_local",
   "codex_openrouter_local",
   "direct_openrouter_local",
+  "inside_out_webhook",
   "cursor_cloud",
   "cursor",
   "gemini_local",

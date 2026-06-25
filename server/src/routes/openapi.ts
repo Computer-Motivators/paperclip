@@ -129,6 +129,10 @@ import {
   remoteSecretImportSchema,
   workspaceFileListQuerySchema,
   workspaceFileResourceQuerySchema,
+  insideOutPullSchema,
+  insideOutHeartbeatSchema,
+  insideOutCompleteSchema,
+  insideOutReleaseSchema,
 } from "@paperclipai/shared";
 
 type JsonSchema = Record<string, unknown>;
@@ -4500,6 +4504,60 @@ for (const route of [
     ...(route[0] === "post" || route[0] === "put" ? { body: pluginLocalFolderRequestSchema } : {}),
   });
 }
+
+registry.registerPath({
+  method: "post",
+  path: "/api/inside-out/pull",
+  tags: ["agents"],
+  summary: "Pull and claim inside-out webhook work",
+  request: { body: jsonBody(insideOutPullSchema) },
+  responses: { 200: r.ok(), 204: r.noContent, 401: r.unauthorized, 403: r.forbidden },
+});
+
+registry.registerPath({
+  method: "get",
+  path: "/api/inside-out/agents/{agentId}/bootstrap",
+  tags: ["agents"],
+  summary: "Read inside-out bootstrap manifest for an agent",
+  request: { params: z.object({ agentId: z.string().uuid() }) },
+  responses: { 200: r.ok(), 401: r.unauthorized, 403: r.forbidden, 404: r.notFound },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/inside-out/runs/{runId}/heartbeat",
+  tags: ["agents"],
+  summary: "Extend an inside-out work lease",
+  request: {
+    params: z.object({ runId: z.string().uuid() }),
+    body: jsonBody(insideOutHeartbeatSchema),
+  },
+  responses: { 200: r.ok(), 401: r.unauthorized, 409: r.conflict },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/inside-out/runs/{runId}/complete",
+  tags: ["agents"],
+  summary: "Complete inside-out work for a run",
+  request: {
+    params: z.object({ runId: z.string().uuid() }),
+    body: jsonBody(insideOutCompleteSchema),
+  },
+  responses: { 200: r.ok(), 401: r.unauthorized, 409: r.conflict },
+});
+
+registry.registerPath({
+  method: "post",
+  path: "/api/inside-out/runs/{runId}/release",
+  tags: ["agents"],
+  summary: "Voluntarily release an inside-out claim",
+  request: {
+    params: z.object({ runId: z.string().uuid() }),
+    body: jsonBody(insideOutReleaseSchema),
+  },
+  responses: { 200: r.ok(), 401: r.unauthorized, 409: r.conflict },
+});
 
 // ─── Spec builder ─────────────────────────────────────────────────────────────
 

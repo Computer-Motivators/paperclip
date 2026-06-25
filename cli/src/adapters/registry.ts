@@ -4,6 +4,7 @@ import { printClaudeStreamEvent } from "@paperclipai/adapter-claude-local/cli";
 import { printCodexStreamEvent } from "@paperclipai/adapter-codex-local/cli";
 import { printCodexStreamEvent as printCodexOpenRouterStreamEvent } from "@computermotivators/adapter-codex-openrouter-local/cli";
 import { printDirectOpenRouterStreamEvent } from "@computermotivators/adapter-direct-openrouter-local/cli";
+import { formatInsideOutStdoutEvent } from "@computermotivators/adapter-inside-out-webhook/cli";
 import { printCursorStreamEvent } from "@paperclipai/adapter-cursor-local/cli";
 import { printCursorCloudEvent } from "@paperclipai/adapter-cursor-cloud/cli";
 import { printGeminiStreamEvent } from "@paperclipai/adapter-gemini-local/cli";
@@ -37,6 +38,11 @@ const codexOpenRouterLocalCLIAdapter: CLIAdapterModule = {
 const directOpenRouterLocalCLIAdapter: CLIAdapterModule = {
   type: "direct_openrouter_local",
   formatStdoutEvent: printDirectOpenRouterStreamEvent,
+};
+
+const insideOutWebhookCLIAdapter: CLIAdapterModule = {
+  type: "inside_out_webhook",
+  formatStdoutEvent: formatInsideOutStdoutEvent,
 };
 
 const openCodeLocalCLIAdapter: CLIAdapterModule = {
@@ -81,6 +87,7 @@ const adaptersByType = new Map<string, CLIAdapterModule>(
     codexLocalCLIAdapter,
     codexOpenRouterLocalCLIAdapter,
     directOpenRouterLocalCLIAdapter,
+    insideOutWebhookCLIAdapter,
     openCodeLocalCLIAdapter,
     piLocalCLIAdapter,
     cursorLocalCLIAdapter,
