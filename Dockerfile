@@ -35,6 +35,7 @@ COPY packages/adapters/claude-local/package.json packages/adapters/claude-local/
 COPY packages/adapters/codex-local/package.json packages/adapters/codex-local/
 COPY packages/adapters/codex-openrouter-local/package.json packages/adapters/codex-openrouter-local/
 COPY packages/adapters/direct-openrouter-local/package.json packages/adapters/direct-openrouter-local/
+COPY packages/adapters/inside-out-webhook/package.json packages/adapters/inside-out-webhook/
 COPY packages/adapters/cursor-cloud/package.json packages/adapters/cursor-cloud/
 COPY packages/adapters/cursor-local/package.json packages/adapters/cursor-local/
 COPY packages/adapters/gemini-local/package.json packages/adapters/gemini-local/
